@@ -10,3 +10,8 @@ dependencies = [
     "pyarrow>=26.0.0",
     "pyyaml>=6.0.3",
 ]
+
+[dependency-groups]
+cards = [
+    "playwright>=1.64.0",
+]

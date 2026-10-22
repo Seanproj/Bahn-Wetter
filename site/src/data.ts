@@ -57,10 +57,47 @@ export interface Corridor {
   }>>>;
 }
 
+/** Observed results in the last 7 days of data (pipeline/ranking.py). */
+export interface RankedTrain {
+  label: string;
+  line: string;
+  train_number: string;
+  time: string;
+  destination?: string;
+  direction?: Direction;
+  p6: number;
+  mean_delay: number;
+  max_delay: number;
+  runs: number;
+  cancels: number;
+}
+
+export interface RankedLine {
+  line: string;
+  runs: number;
+  p6: number;
+  mean_delay: number;
+  cancel_rate: number;
+}
+
+export interface Ranking {
+  window: { from: string; to: string };
+  station: string;
+  hub: {
+    lines_worst: RankedLine[];
+    lines_best: RankedLine[];
+    trains_worst: RankedTrain[];
+    trains_best: RankedTrain[];
+    biggest: { label: string; line: string; date: string; time: string; destination: string; delay: number };
+  };
+  corridor: { trains_worst: RankedTrain[]; trains_best: RankedTrain[] };
+}
+
 export interface Data {
   meta: Meta;
   hub: Hub;
   corridor: Corridor;
+  ranking: Ranking;
 }
 
 async function getJson<T>(name: string): Promise<T> {
@@ -70,10 +107,11 @@ async function getJson<T>(name: string): Promise<T> {
 }
 
 export async function loadData(): Promise<Data> {
-  const [meta, hub, corridor] = await Promise.all([
+  const [meta, hub, corridor, ranking] = await Promise.all([
     getJson<Meta>("meta.json"),
     getJson<Hub>("hub.json"),
     getJson<Corridor>("corridor.json"),
+    getJson<Ranking>("ranking.json"),
   ]);
-  return { meta, hub, corridor };
+  return { meta, hub, corridor, ranking };
 }

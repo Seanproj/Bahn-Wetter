@@ -3,6 +3,7 @@
 - meta.json      data range, weather thresholds/copy, Hessen holidays, attribution
 - hub.json       Frankfurt Hbf: overall, per day type and hour (all lines combined), per line
 - corridor.json  Frankfurt Hbf ↔ Darmstadt Hbf trips: direction × day type × line × departure hour
+- ranking.json   observed worst/best lines and trains in the last 7 days of data (ranking.py)
 
 Every forecast carries n (sample size). Cells with n < min_samples have p = null ("데이터 부족").
 The site decides today's day type itself, so the export stays valid between data refreshes.
@@ -21,7 +22,8 @@ import holidays
 import pandas as pd
 import yaml
 
-from events import load_stations
+from events import load_stations, load_stops, load_trips
+from ranking import weekly_ranking
 
 ROOT = Path(__file__).resolve().parent.parent
 STATS = ROOT / "data" / "stats"
@@ -129,6 +131,8 @@ def main() -> None:
         "hub.json": export_hub(stops, cfg["hub"]),
         "corridor.json": export_corridor(trips, cfg, n_days),
     }
+    events = load_stops()
+    files["ranking.json"] = weekly_ranking(events, load_trips(events), cfg["hub"], meta["stations"])
     for name, obj in files.items():
         path = OUT / name
         path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))

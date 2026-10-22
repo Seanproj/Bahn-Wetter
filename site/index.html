@@ -9,6 +9,13 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌦️</text></svg>" />
   </head>
   <body data-sky="cloudy">
+    <div id="sky" aria-hidden="true">
+      <div class="sun"></div>
+      <div class="clouds far"></div>
+      <div class="clouds near"></div>
+      <div class="rain"></div>
+      <div class="flash"></div>
+    </div>
     <header class="top">
       <a class="brand" href="#/">🌦️ Bahn-Wetter</a>
       <span class="tag">비공식 · 과거 패턴 기반</span>
@@ -16,6 +23,7 @@
     <nav class="tabs" aria-label="페이지">
       <a href="#/" data-route="home">🏙️<span>오늘</span></a>
       <a href="#/commute" data-route="commute">🚆<span>출퇴근</span></a>
+      <a href="#/ranking" data-route="ranking">🏆<span>랭킹</span></a>
       <a href="#/about" data-route="about">ℹ️<span>소개</span></a>
     </nav>
     <main id="app" aria-live="polite"><p class="loading">예보 불러오는 중…</p></main>

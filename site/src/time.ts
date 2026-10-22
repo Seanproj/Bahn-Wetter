@@ -36,6 +36,14 @@ export function berlinNow(at: Date = new Date()): BerlinNow {
   };
 }
 
+/** A fixed day (YYYY-MM-DD) as seen in Berlin, at the given hour. Used by the share card. */
+export function berlinDay(date: string, hour = 12): BerlinNow | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const at = new Date(`${date}T12:00:00Z`); // noon UTC is the same calendar day in Berlin
+  if (Number.isNaN(at.getTime())) return null;
+  return { ...berlinNow(at), hour };
+}
+
 export function dayTypeOf(now: BerlinNow, meta: Meta): DayType {
   if (now.weekday === 0 || meta.holidays_he[now.date]) return "sun_hol";
   if (now.weekday === 6) return "sat";

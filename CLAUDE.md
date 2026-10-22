@@ -43,7 +43,11 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - Today's day type is computed in the browser (Europe/Berlin time + Hessen holidays from meta.json),
   so the static JSON stays valid between data refreshes.
 - Weather level logic lives only in `site/src/weather.ts`, driven by `config/weather.yaml`.
-- The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 and never picks 🌪️.
+- The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 plus a small-sample
+  penalty 0.67·sqrt(b(1−b)/n), and never picks 🌪️.
+- The ranking is observed data for the last 7 days *of the data*, not the calendar week — always show its dates.
+- `#/card?date=YYYY-MM-DD` renders the share card for any day; animated sky layers live in `#sky` and stop
+  under prefers-reduced-motion.
 
 ## Layout
 ```
@@ -55,14 +59,15 @@ pipeline/            Python 3.12+, managed by uv
   model.py           hierarchical Beta-Binomial shrinkage + recency weights
   backtest.py        time-split backtest, Brier, calibration → config/model.yaml
   build_stats.py     final probability tables → data/stats/{stop,trip}_cells.parquet
-  export.py          static JSON → site/public/data/{meta,hub,corridor}.json
+  ranking.py         observed worst/best lines & trains in the last 7 days of data
+  export.py          static JSON → site/public/data/{meta,hub,corridor,ranking}.json
 config/
   station_search.yaml  search patterns for target stations (input)
   stations.yaml        resolved stations + EVA (generated, then committed)
   weather.yaml         probability → weather icon thresholds and copy
   model.yaml           hyper-parameters chosen by backtest.py (generated)
-site/                Vite + vanilla TS static site (src/: data, time, weather, views, main)
-cards/               share-card PNG generation (Phase 3)
+site/                Vite + vanilla TS static site (src/: data, time, weather, views, ranking, card, main)
+cards/               make_card.py: Playwright screenshot of #/card → cards/out/ (gitignored)
 reports/             phase reports, backtest results
 data/                gitignored: raw downloads + slim cache
 ```
@@ -77,6 +82,8 @@ uv run python pipeline/backtest.py              # tune + holdout backtest → re
 uv run python pipeline/build_stats.py           # final probability tables → data/stats/*.parquet
 uv run python pipeline/export.py                # static JSON → site/public/data/ (committed)
 cd site && npm install && npm run dev           # local site (npm run build → site/dist/)
+uv run --group cards python cards/make_card.py [--date YYYY-MM-DD]   # 1080×1350 share card → cards/out/
+#   needs site/dist; set CHROMIUM_PATH=/opt/pw-browsers/chromium in the cloud container
 ```
 
 ## Environment notes

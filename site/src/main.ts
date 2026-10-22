@@ -1,10 +1,13 @@
 import "./style.css";
 import { loadData, type Data, type DayType, type Direction, type Forecast } from "./data";
-import { berlinNow, dayTypeOf } from "./time";
+import { cardSky, renderCard } from "./card";
+import { renderRanking } from "./ranking";
+import { berlinDay, berlinNow, dayTypeOf } from "./time";
 import { commuteSky, esc, homeSky, renderAbout, renderCommute, renderFooter, renderHome, type Ctx } from "./views";
 import { pct, sampleNote, weatherOf } from "./weather";
 
-type Route = "home" | "commute" | "about";
+type Route = "home" | "commute" | "ranking" | "about" | "card";
+const ROUTES: Route[] = ["home", "commute", "ranking", "about", "card"];
 
 const app = document.querySelector<HTMLElement>("#app")!;
 const footer = document.querySelector<HTMLElement>("#footer")!;
@@ -30,17 +33,30 @@ const now = berlinNow();
 let dayType: DayType | null = null; // null = today
 let direction: Direction = store<Direction>("direction", "ffm_da");
 
-function route(): Route {
-  const r = location.hash.replace(/^#\/?/, "");
-  return r === "commute" || r === "about" ? r : "home";
+/** "#/card?date=2026-10-23" → { route: "card", params } */
+function parseHash(): { route: Route; params: URLSearchParams } {
+  const [path, query = ""] = location.hash.replace(/^#\/?/, "").split("?");
+  const route = (ROUTES as string[]).includes(path) ? (path as Route) : "home";
+  return { route, params: new URLSearchParams(query) };
 }
 
 function render() {
-  const today = dayTypeOf(now, data.meta);
-  const ctx: Ctx = { now, today, dayType: dayType ?? today, direction };
-  const r = route();
-  app.innerHTML = r === "commute" ? renderCommute(data, ctx) : r === "about" ? renderAbout(data) : renderHome(data, ctx);
-  document.body.dataset.sky = r === "commute" ? commuteSky(data, ctx) : r === "about" ? "about" : homeSky(data, ctx);
+  const { route: r, params } = parseHash();
+  // The share card can be rendered for any day (cards/make_card.py passes ?date=).
+  const at = r === "card" ? (berlinDay(params.get("date") ?? "") ?? now) : now;
+  const today = dayTypeOf(at, data.meta);
+  const ctx: Ctx = { now: at, today, dayType: r === "card" ? today : (dayType ?? today), direction };
+  document.body.classList.toggle("card-mode", r === "card");
+  const view = {
+    home: () => [renderHome(data, ctx), homeSky(data, ctx)],
+    commute: () => [renderCommute(data, ctx), commuteSky(data, ctx)],
+    ranking: () => [renderRanking(data), "about"],
+    about: () => [renderAbout(data), "about"],
+    card: () => [renderCard(data, ctx), cardSky(data, ctx)],
+  }[r];
+  const [html, sky] = view();
+  app.innerHTML = html;
+  document.body.dataset.sky = sky;
   document.querySelectorAll<HTMLAnchorElement>("nav.tabs a").forEach((a) => {
     a.setAttribute("aria-current", a.dataset.route === r ? "page" : "false");
   });

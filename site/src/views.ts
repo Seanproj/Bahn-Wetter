@@ -111,15 +111,24 @@ export function renderHome(data: Data, ctx: Ctx): string {
 /** Chance the trip goes badly: canceled, or runs and arrives ≥6 min late. */
 const badTrip = (f: Forecast) => (f.pc ?? 0) + (1 - (f.pc ?? 0)) * f.p6!;
 
-function bestTrain(data: Data, ctx: Ctx, hours: number[]) {
-  const cells = data.corridor.cells[ctx.direction][ctx.dayType];
+/**
+ * Ranking score: badTrip plus a penalty for small samples (≈ upper 75% bound of a binomial
+ * estimate), so a rarely-run train cannot win on a lucky handful of trips.
+ */
+const pickScore = (f: Forecast) => {
+  const b = badTrip(f);
+  return b + 0.67 * Math.sqrt((b * (1 - b)) / Math.max(f.n, 1));
+};
+
+export function bestTrain(data: Data, direction: Direction, dayType: DayType, hours: number[]) {
+  const cells = data.corridor.cells[direction][dayType];
   let best: { line: string; hour: number; f: Forecast } | null = null;
   for (const line of data.corridor.lines) {
     for (const h of hours) {
       const f = cells[line]?.hours[String(h)];
       if (!f || f.p6 === null) continue;
       if (weatherOf(f, data.meta).name === data.meta.weather.tornado.name) continue; // never recommend 🌪️
-      if (!best || badTrip(f) < badTrip(best.f) || (badTrip(f) === badTrip(best.f) && f.n > best.f.n)) best = { line, hour: h, f };
+      if (!best || pickScore(f) < pickScore(best.f)) best = { line, hour: h, f };
     }
   }
   return best;
@@ -150,7 +159,7 @@ export function renderCommute(data: Data, ctx: Ctx): string {
   const isToday = ctx.dayType === ctx.today;
 
   const window = bestWindow(ctx);
-  const best = bestTrain(data, ctx, window.hours);
+  const best = bestTrain(data, ctx.direction, ctx.dayType, window.hours);
 
   const hours = [...new Set(corridor.lines.flatMap((l) => Object.keys(cells[l]?.hours ?? {}).map(Number)))].sort((a, b) => a - b);
   const head = corridor.lines.map((l) => `<th scope="col"><span class="badge">${esc(l)}</span></th>`).join("");
