@@ -1,0 +1,225 @@
+/* Bahn-Wetter — weather-app look, mobile first. Sky gradient follows body[data-sky]. */
+
+:root {
+  --fg: #0f1b2d;
+  --fg-soft: #3c4a5e;
+  --card: rgba(255, 255, 255, 0.62);
+  --card-border: rgba(255, 255, 255, 0.7);
+  --card-solid: #eef2f7;
+  --chip: rgba(255, 255, 255, 0.45);
+  --chip-on: #0f1b2d;
+  --chip-on-fg: #fff;
+  --accent: #1d5fd1;
+  --bar: rgba(15, 27, 45, 0.12);
+  --now: rgba(29, 95, 209, 0.14);
+  --shadow: 0 8px 30px rgba(15, 27, 45, 0.12);
+  --radius: 20px;
+
+  --sky-sunny: linear-gradient(180deg, #4aa8ff 0%, #8fd0ff 45%, #fff3c4 100%);
+  --sky-partly: linear-gradient(180deg, #5a9fe0 0%, #a9cdee 50%, #eef3f8 100%);
+  --sky-cloudy: linear-gradient(180deg, #8193a8 0%, #b8c4d2 50%, #e8ecf1 100%);
+  --sky-rain: linear-gradient(180deg, #4d5d72 0%, #7d8ea3 50%, #c9d2dc 100%);
+  --sky-storm: linear-gradient(180deg, #2c3446 0%, #535c73 50%, #9aa2b4 100%);
+  --sky-tornado: linear-gradient(180deg, #4a3f35 0%, #85776a 50%, #cfc6bb 100%);
+  --sky-unknown: var(--sky-cloudy);
+  --sky-about: linear-gradient(180deg, #6fa7da 0%, #dfe9f3 100%);
+
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fg: #eef3fa;
+    --fg-soft: #b3bfd0;
+    --card: rgba(16, 24, 38, 0.55);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --card-solid: #1b2433;
+    --chip: rgba(255, 255, 255, 0.1);
+    --chip-on: #eef3fa;
+    --chip-on-fg: #0f1b2d;
+    --accent: #7fb2ff;
+    --bar: rgba(255, 255, 255, 0.14);
+    --now: rgba(127, 178, 255, 0.18);
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+
+    --sky-sunny: linear-gradient(180deg, #0b2a55 0%, #1d4f8c 55%, #3a6aa0 100%);
+    --sky-partly: linear-gradient(180deg, #0f2440 0%, #29476e 55%, #46607f 100%);
+    --sky-cloudy: linear-gradient(180deg, #161d29 0%, #2c3646 55%, #445063 100%);
+    --sky-rain: linear-gradient(180deg, #10151e 0%, #232c3a 55%, #364254 100%);
+    --sky-storm: linear-gradient(180deg, #08090f 0%, #1a1c2a 55%, #2d2f44 100%);
+    --sky-tornado: linear-gradient(180deg, #120e0a 0%, #2b231c 55%, #45392e 100%);
+    --sky-about: linear-gradient(180deg, #0f2440 0%, #1c2a3d 100%);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--fg);
+  background: transparent;
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  --sky: var(--sky-cloudy);
+}
+/* The sky lives on a fixed layer: background-attachment: fixed is unreliable on iOS. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background: var(--sky);
+}
+html { background: #8193a8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { background: #161d29; } }
+body[data-sky="sunny"] { --sky: var(--sky-sunny); }
+body[data-sky="partly"] { --sky: var(--sky-partly); }
+body[data-sky="cloudy"] { --sky: var(--sky-cloudy); }
+body[data-sky="rain"] { --sky: var(--sky-rain); }
+body[data-sky="storm"] { --sky: var(--sky-storm); }
+body[data-sky="tornado"] { --sky: var(--sky-tornado); }
+body[data-sky="unknown"] { --sky: var(--sky-unknown); }
+body[data-sky="about"] { --sky: var(--sky-about); }
+/* Dark skies need light text even in light mode. */
+body[data-sky="rain"] .hero, body[data-sky="storm"] .hero, body[data-sky="tornado"] .hero { color: #f4f7fb; }
+
+a { color: var(--accent); }
+h1, h2, p { margin: 0; }
+
+.top, main, footer { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+.top { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; gap: 8px; }
+.brand { font-weight: 800; font-size: 1.05rem; color: inherit; text-decoration: none; }
+.tag { font-size: 0.72rem; padding: 4px 9px; border-radius: 99px; background: var(--chip); }
+
+/* Bottom tab bar */
+.tabs {
+  position: fixed; inset: auto 0 0 0; z-index: 10;
+  display: flex; justify-content: center; gap: 4px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-top: 1px solid var(--card-border);
+}
+.tabs a {
+  flex: 0 1 140px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0; border-radius: 14px; text-decoration: none; color: var(--fg-soft); font-size: 1.2rem;
+}
+.tabs a span { font-size: 0.72rem; font-weight: 600; }
+.tabs a[aria-current="page"] { color: var(--fg); background: var(--chip); }
+
+/* Hero */
+.hero { text-align: center; padding: 26px 0 18px; }
+.hero.compact { padding-bottom: 8px; }
+.hero .date { font-size: 0.9rem; opacity: 0.85; }
+.hero h1 { font-size: 1.35rem; margin-top: 4px; font-weight: 700; }
+.hero .big { font-size: 5.5rem; line-height: 1.1; margin: 10px 0 2px; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.18)); }
+.hero .headline { font-size: 1.05rem; }
+.hero .headline strong { display: block; font-size: 3.4rem; font-weight: 300; letter-spacing: -0.02em; line-height: 1.1; }
+.hero .condition { margin-top: 6px; font-weight: 600; }
+.hero .note { margin-top: 10px; opacity: 0.8; }
+
+.stats { display: flex; justify-content: center; gap: 22px; margin: 14px 0 0; }
+.stats div { text-align: center; }
+.stats dt { font-size: 0.72rem; opacity: 0.75; }
+.stats dd { margin: 2px 0 0; font-weight: 700; font-size: 1.05rem; }
+
+.note { font-size: 0.78rem; color: inherit; opacity: 0.75; }
+.card .note { color: var(--fg-soft); opacity: 1; margin-bottom: 10px; }
+
+/* Chips + toggle */
+.chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 4px 0 14px; }
+.chip, .toggle button, .close {
+  font: inherit; font-size: 0.82rem; font-weight: 600; color: var(--fg);
+  border: 1px solid var(--card-border); background: var(--chip); border-radius: 99px;
+  padding: 7px 13px; cursor: pointer;
+}
+.chip.on, .toggle button.on { background: var(--chip-on); color: var(--chip-on-fg); border-color: transparent; }
+.toggle { display: inline-flex; gap: 4px; margin-top: 14px; padding: 4px; border-radius: 99px; background: var(--chip); flex-wrap: wrap; justify-content: center; }
+.toggle button { border: 0; background: transparent; }
+
+/* Cards */
+.card {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+.card h2 { font-size: 0.82rem; font-weight: 700; color: var(--fg-soft); text-transform: none; margin-bottom: 12px; letter-spacing: 0.01em; }
+.card h2 small { font-weight: 500; margin-left: 6px; opacity: 0.8; }
+.now-card p { display: flex; align-items: center; gap: 10px; }
+
+.wx { display: inline-block; line-height: 1; }
+.wx.md { font-size: 2rem; }
+.wx.lg { font-size: 3.2rem; }
+
+/* Hourly strip */
+.strip { display: flex; gap: 6px; overflow-x: auto; list-style: none; margin: 0 -16px; padding: 2px 16px 6px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.strip::-webkit-scrollbar { display: none; }
+.hour {
+  flex: 0 0 58px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 0; border-radius: 16px; scroll-snap-align: center; cursor: pointer;
+}
+.hour .h { font-size: 0.75rem; color: var(--fg-soft); }
+.hour .wx { font-size: 1.6rem; }
+.hour .p { font-size: 0.85rem; font-weight: 700; }
+.hour.now { background: var(--now); outline: 1px solid var(--accent); }
+.hour.now .h { color: var(--accent); font-weight: 700; }
+
+/* Line list */
+.lines { list-style: none; margin: 0; padding: 0; }
+.line-row { display: grid; grid-template-columns: 64px 1fr 44px 28px; align-items: center; gap: 10px; padding: 7px 0; cursor: pointer; }
+.line-row + .line-row { border-top: 1px solid var(--bar); }
+.line-row .p { text-align: right; font-weight: 700; font-size: 0.9rem; }
+.bar { height: 6px; border-radius: 99px; background: var(--bar); overflow: hidden; }
+.bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.badge {
+  display: inline-block; min-width: 44px; text-align: center; font-size: 0.75rem; font-weight: 800;
+  padding: 3px 7px; border-radius: 7px; background: var(--chip-on); color: var(--chip-on-fg);
+}
+
+/* Best train */
+.best-line { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.best-line small { color: var(--fg-soft); }
+
+/* Commute grid */
+.grid-wrap { max-height: 62vh; overflow: auto; margin: 0 -8px; border-radius: 12px; }
+.grid { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 0.8rem; }
+.grid thead th { position: sticky; top: 0; z-index: 1; background: var(--card-solid); padding: 4px 0 6px; }
+.grid tbody th { font-weight: 600; color: var(--fg-soft); text-align: left; padding-left: 6px; white-space: nowrap; font-size: 0.75rem; }
+.grid td { text-align: center; padding: 6px 2px; border-radius: 10px; background: var(--chip); cursor: pointer; min-width: 48px; }
+.grid td .wx { display: block; font-size: 1.15rem; margin-bottom: 2px; }
+.grid td span:not(.wx) { font-weight: 700; }
+.grid td.empty { background: transparent; cursor: default; }
+.grid td.thin span { font-size: 0.7rem; font-weight: 500; color: var(--fg-soft); }
+.grid tr.now td { outline: 1px solid var(--accent); }
+.grid tr.now th { color: var(--accent); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* About */
+.prose h2 { margin-top: 18px; }
+.prose h2:first-child { margin-top: 0; }
+.prose p { line-height: 1.6; margin-bottom: 8px; font-size: 0.92rem; }
+.legend { list-style: none; padding: 0; margin: 0 0 10px; font-size: 0.9rem; line-height: 1.9; }
+
+/* Detail sheet */
+dialog#sheet {
+  width: min(520px, calc(100% - 24px)); margin: auto auto 12px; border: 1px solid var(--card-border);
+  border-radius: 24px; padding: 18px; color: var(--fg); background: var(--card);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: var(--shadow);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) dialog#sheet { background: rgba(22, 30, 44, 0.92); } }
+@media (prefers-color-scheme: light) { dialog#sheet { background: rgba(255, 255, 255, 0.94); } }
+dialog#sheet::backdrop { background: rgba(0, 0, 0, 0.35); }
+.sheet-title { font-weight: 700; margin-bottom: 12px; }
+.sheet-main { display: flex; align-items: center; gap: 14px; }
+.sheet-main strong { font-size: 1.8rem; }
+.sheet-main small { color: var(--fg-soft); }
+dialog .stats { justify-content: flex-start; }
+dialog .note { margin: 12px 0; }
+.close { width: 100%; }
+
+footer { padding-top: 10px; padding-bottom: 20px; font-size: 0.72rem; line-height: 1.6; opacity: 0.85; text-align: center; }
+footer a { color: inherit; }
+.loading { text-align: center; padding: 60px 0; }
+
+@media (min-width: 700px) {
+  .hero .big { font-size: 6.5rem; }
+}
+

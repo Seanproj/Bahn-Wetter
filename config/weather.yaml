@@ -1,11 +1,12 @@
-# P(delay >= 6 min) → weather. Initial values from HANDOFF §5.3; tune after looking at the
-# real distribution (target: Frankfurt Hbf overall average lands near ☁️).
+# P(delay >= 6 min) → weather. Thresholds tuned in Phase 1 so the Frankfurt Hbf average (~24%)
+# lands on ☁️ (see reports/phase1_summary.md). Original HANDOFF §5.3 values: 15/30/45/60.
 delay_threshold_min: 6
 min_samples: 10
-levels:   # evaluated top to bottom; first match wins
-  - {icon: "🌪️", name: tornado, when: "cancel_rate >= 0.10", text: "토네이도 — 열차가 사라질 수 있음"}
-  - {icon: "⛈️", name: storm,   min_p: 0.60, text: "뇌우 — 중요한 약속이면 한 대 일찍"}
-  - {icon: "🌧️", name: rain,    min_p: 0.45, text: "비 — 다음 열차도 확인"}
-  - {icon: "☁️", name: cloudy,  min_p: 0.30, text: "흐림 — 커피 한 잔 여유"}
-  - {icon: "🌤️", name: partly,  min_p: 0.15, text: "구름 조금 — 환승 5분은 아슬아슬"}
-  - {icon: "☀️", name: sunny,   min_p: 0.00, text: "맑음 — 그냥 타세요"}
+tornado_cancel_rate: 0.10
+levels:   # evaluated top to bottom; first match wins. Tornado (cancel rate) is checked before these.
+  - {icon: "⛈️", name: storm,  min_p: 0.45, label: "뇌우", text: "중요한 약속이면 한 대 일찍"}
+  - {icon: "🌧️", name: rain,   min_p: 0.30, label: "비",   text: "다음 열차도 확인해 두세요"}
+  - {icon: "☁️", name: cloudy, min_p: 0.20, label: "흐림", text: "커피 한 잔 여유를 챙기세요"}
+  - {icon: "🌤️", name: partly, min_p: 0.10, label: "구름 조금", text: "환승 5분은 아슬아슬"}
+  - {icon: "☀️", name: sunny,  min_p: 0.00, label: "맑음", text: "그냥 타세요"}
+tornado: {icon: "🌪️", name: tornado, label: "토네이도", text: "열차가 사라질 수 있음"}

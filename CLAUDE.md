@@ -39,6 +39,12 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - `train_type = "Bus"` rows are planned rail-replacement buses; excluded.
 - Trip (commuter) forecasts = arrival delay at the destination, keyed by origin departure hour.
 
+## Site conventions
+- Today's day type is computed in the browser (Europe/Berlin time + Hessen holidays from meta.json),
+  so the static JSON stays valid between data refreshes.
+- Weather level logic lives only in `site/src/weather.ts`, driven by `config/weather.yaml`.
+- The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 and never picks 🌪️.
+
 ## Layout
 ```
 pipeline/            Python 3.12+, managed by uv
@@ -49,13 +55,13 @@ pipeline/            Python 3.12+, managed by uv
   model.py           hierarchical Beta-Binomial shrinkage + recency weights
   backtest.py        time-split backtest, Brier, calibration → config/model.yaml
   build_stats.py     final probability tables → data/stats/{stop,trip}_cells.parquet
-  export.py          (Phase 2) static JSON → site/public/data/
+  export.py          static JSON → site/public/data/{meta,hub,corridor}.json
 config/
   station_search.yaml  search patterns for target stations (input)
   stations.yaml        resolved stations + EVA (generated, then committed)
   weather.yaml         probability → weather icon thresholds and copy
   model.yaml           hyper-parameters chosen by backtest.py (generated)
-site/                static frontend (Phase 2)
+site/                Vite + vanilla TS static site (src/: data, time, weather, views, main)
 cards/               share-card PNG generation (Phase 3)
 reports/             phase reports, backtest results
 data/                gitignored: raw downloads + slim cache
@@ -69,6 +75,8 @@ uv run python pipeline/explore.py               # schema + stations + corridor �
 uv run python pipeline/slim.py                  # target-station slim cache → data/slim/
 uv run python pipeline/backtest.py              # tune + holdout backtest → reports/backtest.md, config/model.yaml
 uv run python pipeline/build_stats.py           # final probability tables → data/stats/*.parquet
+uv run python pipeline/export.py                # static JSON → site/public/data/ (committed)
+cd site && npm install && npm run dev           # local site (npm run build → site/dist/)
 ```
 
 ## Environment notes
