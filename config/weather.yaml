@@ -1,0 +1,11 @@
+# P(delay >= 6 min) → weather. Initial values from HANDOFF §5.3; tune after looking at the
+# real distribution (target: Frankfurt Hbf overall average lands near ☁️).
+delay_threshold_min: 6
+min_samples: 10
+levels:   # evaluated top to bottom; first match wins
+  - {icon: "🌪️", name: tornado, when: "cancel_rate >= 0.10", text: "토네이도 — 열차가 사라질 수 있음"}
+  - {icon: "⛈️", name: storm,   min_p: 0.60, text: "뇌우 — 중요한 약속이면 한 대 일찍"}
+  - {icon: "🌧️", name: rain,    min_p: 0.45, text: "비 — 다음 열차도 확인"}
+  - {icon: "☁️", name: cloudy,  min_p: 0.30, text: "흐림 — 커피 한 잔 여유"}
+  - {icon: "🌤️", name: partly,  min_p: 0.15, text: "구름 조금 — 환승 5분은 아슬아슬"}
+  - {icon: "☀️", name: sunny,   min_p: 0.00, text: "맑음 — 그냥 타세요"}

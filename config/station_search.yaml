@@ -1,0 +1,19 @@
+# Search patterns (ILIKE) for target stations. Not EVAs — explore.py resolves these against
+# the real data and writes config/stations.yaml.
+# Patterns are matched case-insensitively against station_name; exact_name narrows the match
+# when the pattern hits several stations.
+hub:
+  - key: frankfurt_hbf
+    pattern: "Frankfurt (Main) Hbf%"
+corridor:   # HANDOFF §4.1, north → south
+  - {key: frankfurt_hbf,       pattern: "Frankfurt (Main) Hbf%"}
+  - {key: frankfurt_sued,      pattern: "Frankfurt (Main) S_d%"}
+  - {key: frankfurt_louisa,    pattern: "Frankfurt%Louisa%"}
+  - {key: neu_isenburg,        pattern: "Neu%Isenburg%"}
+  - {key: dreieich_buchschlag, pattern: "Dreieich%Buchschlag%"}
+  - {key: langen,              pattern: "Langen (Hess%"}
+  - {key: egelsbach,           pattern: "Egelsbach%"}
+  - {key: erzhausen,           pattern: "Erzhausen%"}
+  - {key: darmstadt_wixhausen, pattern: "Darmstadt%Wixhausen%"}
+  - {key: darmstadt_arheilgen, pattern: "Darmstadt%Arheilgen%"}
+  - {key: darmstadt_hbf,       pattern: "Darmstadt Hbf%"}
