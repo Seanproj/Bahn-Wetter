@@ -68,6 +68,7 @@ config/
   model.yaml           hyper-parameters chosen by backtest.py (generated)
 site/                Vite + vanilla TS static site (src/: data, time, weather, views, ranking, card, main)
 cards/               make_card.py: Playwright screenshot of #/card → cards/out/ (gitignored)
+.github/workflows/   refresh-data.yml (monthly data), deploy.yml (Pages + daily card)
 reports/             phase reports, backtest results
 data/                gitignored: raw downloads + slim cache
 ```
@@ -85,6 +86,15 @@ cd site && npm install && npm run dev           # local site (npm run build → 
 uv run --group cards python cards/make_card.py [--date YYYY-MM-DD]   # 1080×1350 share card → cards/out/
 #   needs site/dist; set CHROMIUM_PATH=/opt/pw-browsers/chromium in the cloud container
 ```
+
+## Automation (.github/workflows)
+- `refresh-data.yml` — monthly (3rd, after upstream's release on the 2nd) + manual (`rebuild` input):
+  download months missing from the cached `data/slim` → slim → `backtest.py --strict` (fails if a delay
+  forecast stops beating the line-average baseline) → build_stats → export → commit JSON to main → deploy.
+- `deploy.yml` — on push to main, daily 03:47 UTC, manual, or called by the refresh: build site, render
+  today's card to `site/dist/cards/{YYYY-MM-DD,latest}.png`, deploy to GitHub Pages. PRs build + render only.
+- Backtest folds roll with the data (holdout = latest 4 months, tune = 4 before).
+- Repo settings needed: Pages source = "GitHub Actions"; default branch = main (schedules run there only).
 
 ## Environment notes
 - Data source: `huggingface.co` (dataset `piebro/deutsche-bahn-data`). Downloads may also redirect to

@@ -9,13 +9,15 @@ the later held-out folds, so the headline numbers are not tuned on the data they
 Writes reports/backtest.md and config/model.yaml (chosen hyper-parameters per task).
 
 Usage:
-    uv run python pipeline/backtest.py
+    uv run python pipeline/backtest.py [--strict]
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import itertools
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -29,8 +31,9 @@ ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "backtest.md"
 MODEL_CFG = ROOT / "config" / "model.yaml"
 
-TUNE_MONTHS = ["2026-02", "2026-03", "2026-04", "2026-05"]
-HOLDOUT_MONTHS = ["2026-06", "2026-07", "2026-08", "2026-09"]
+N_TUNE = 4      # months used to pick hyper-parameters
+N_HOLDOUT = 4   # latest months, scored with the chosen settings
+MIN_TRAIN = 3   # months of history before the first tuning month
 HALF_LIVES = [7, 14, 21, 42, 90, None]
 STRENGTHS = [1, 5, 20, 50, 200]
 EPS = 1e-6
@@ -70,9 +73,22 @@ def run_fold(events, target, levels, month, configs):
     return train, test, y, preds
 
 
+def fold_months(stops: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """Roll the folds forward with the data: holdout = latest complete months, tune = the ones before."""
+    months = sorted(stops["planned"].dt.strftime("%Y-%m").unique())
+    if len(months) < MIN_TRAIN + N_TUNE + N_HOLDOUT:
+        raise SystemExit(f"need ≥{MIN_TRAIN + N_TUNE + N_HOLDOUT} months of data, have {len(months)}")
+    return months[-(N_TUNE + N_HOLDOUT):-N_HOLDOUT], months[-N_HOLDOUT:]
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--strict", action="store_true",
+                    help="exit 1 if a delay forecast does not beat the line-average baseline (b) on the holdout")
+    args = ap.parse_args()
     stops = load_stops()
     trips = load_trips(stops)
+    tune_months, holdout_months = fold_months(stops)
     configs = list(itertools.product(HALF_LIVES, STRENGTHS))
     report = [
         "# Phase 1 — 백테스트 결과",
@@ -87,19 +103,20 @@ def main() -> None:
         "운행(코리도어): 방향 → 방향×노선 → … → 방향×노선×요일구분×출발시간대.",
         "- 정차 지연은 도착 기준(출발역만 출발 기준), 코리도어 운행은 **도착역 도착 지연** 기준.",
         "- 분할: 시험월 M마다 M 이전 전체로 학습(확장 윈도우), M 한 달 전체 예측.",
-        f"- 튜닝 폴드 {TUNE_MONTHS[0]}~{TUNE_MONTHS[-1]}에서 half-life × prior 강도 선택, "
-        f"**보고 수치는 홀드아웃 폴드 {HOLDOUT_MONTHS[0]}~{HOLDOUT_MONTHS[-1]}**.",
+        f"- 튜닝 폴드 {tune_months[0]}~{tune_months[-1]}에서 half-life × prior 강도 선택, "
+        f"**보고 수치는 홀드아웃 폴드 {holdout_months[0]}~{holdout_months[-1]}**.",
         "- 베이스라인 (a) 역 평균 / 방향 평균, (b) 역×노선 평균 / 방향×노선 평균 (학습 기간 단순 평균).",
         "- BSS = 1 − Brier/Brier_baseline (양수면 베이스라인보다 나음).",
         "",
     ]
     chosen = {}
     summary_rows = []
+    failures = []
     for name, (events, target, levels, base_a, base_b) in tasks(stops, trips).items():
         print(f"[{name}] tuning …", flush=True)
         # ── Tune ─────────────────────────────────────────────────────────
         scores = {cfg: [] for cfg in configs}
-        for month in TUNE_MONTHS:
+        for month in tune_months:
             _, test, y, preds = run_fold(events, target, levels, month, configs)
             for cfg, p in preds.items():
                 scores[cfg].append((brier(p, y), len(y)))
@@ -112,7 +129,7 @@ def main() -> None:
         default_cfg = (21, 20)  # HANDOFF starting point
         rows = []
         acc = {k: [] for k in ("p", "pd", "pa", "pb", "y", "n", "seg")}
-        for month in HOLDOUT_MONTHS:
+        for month in holdout_months:
             start = pd.Timestamp(month + "-01")
             train, test, y, _ = run_fold(events, target, levels, month, [])
             counts = daily_counts(train, target, levels)
@@ -126,6 +143,8 @@ def main() -> None:
                 acc[k].append(v)
         P, PD, PA, PB, Y, N, S = (np.concatenate(acc[k]) for k in ("p", "pd", "pa", "pb", "y", "n", "seg"))
         b_m, b_d, b_a, b_b = brier(P, Y), brier(PD, Y), brier(PA, Y), brier(PB, Y)
+        if name.endswith("delay6") and b_m >= b_b:
+            failures.append(f"{name}: model Brier {b_m:.4f} ≥ baseline (b) {b_b:.4f}")
         summary_rows.append((name, f"{len(Y):,}", f"{Y.mean():.1%}", f"{b_m:.4f}", f"{b_a:.4f}", f"{b_b:.4f}",
                              f"{1 - b_m / b_a:+.1%}", f"{1 - b_m / b_b:+.1%}",
                              f"{fmt_hl(best[0])} / {best[1]}"))
@@ -163,7 +182,7 @@ def main() -> None:
         report.append("")
         # Segment breakdown
         report += ["### 세그먼트별 (홀드아웃)", "", "| " + levels[0][0] + " | n | 실제 | 모델 Brier | (a) | (b) | BSS vs (b) |", "|---|---|---|---|---|---|---|"]
-        for sval in pd.unique(S):
+        for sval in sorted(pd.unique(S)):
             m = S == sval
             bm, ba, bb = brier(P[m], Y[m]), brier(PA[m], Y[m]), brier(PB[m], Y[m])
             report.append(f"| {sval} | {m.sum():,} | {Y[m].mean():.1%} | {bm:.4f} | {ba:.4f} | {bb:.4f} | {1 - bm / bb:+.1%} |")
@@ -181,6 +200,10 @@ def main() -> None:
         + yaml.safe_dump({"generated_at": dt.date.today().isoformat(), "tasks": chosen}, sort_keys=False)
     )
     print(f"wrote {REPORT.relative_to(ROOT)} and {MODEL_CFG.relative_to(ROOT)}")
+    if failures:
+        print("⚠️  delay forecast does not beat the baseline:\n  " + "\n  ".join(failures))
+        if args.strict:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

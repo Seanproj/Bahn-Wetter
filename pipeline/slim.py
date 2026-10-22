@@ -3,7 +3,7 @@
 Writes data/slim/data-YYYY-MM.parquet (skips months already present unless --force).
 
 Usage:
-    uv run python pipeline/slim.py
+    uv run python pipeline/slim.py [--delete-source]
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ STATIONS = ROOT / "config" / "stations.yaml"
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--delete-source", action="store_true",
+                    help="delete each full monthly file after slimming it (saves disk in CI)")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(STATIONS.read_text())
@@ -41,6 +43,8 @@ def main() -> None:
         )
         n = con.execute(f"SELECT count(*) FROM read_parquet('{dst}')").fetchone()[0]
         print(f"{src.name}: {n:,} rows, {src.stat().st_size / 1e6:.0f} MB → {dst.stat().st_size / 1e6:.1f} MB")
+        if args.delete_source:
+            src.unlink()
 
 
 if __name__ == "__main__":

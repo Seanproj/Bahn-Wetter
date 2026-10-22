@@ -4,6 +4,7 @@ Usage:
     uv run python pipeline/download.py --months 3          # latest 3 months
     uv run python pipeline/download.py --since 2025-11     # every month from 2025-11 on
     uv run python pipeline/download.py --months 3 --force  # re-download even if present
+    uv run python pipeline/download.py --since 2025-11 --skip-slimmed  # CI: only months not in data/slim/
 """
 
 from __future__ import annotations
@@ -37,6 +38,8 @@ def main() -> None:
     g.add_argument("--months", type=int, default=3, help="download the latest N months")
     g.add_argument("--since", help="download every month >= YYYY-MM")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--skip-slimmed", action="store_true",
+                    help="skip months whose slim cache (data/slim/) already exists")
     args = ap.parse_args()
 
     api = HfApi()
@@ -48,6 +51,9 @@ def main() -> None:
     wanted = [m for m in months if m >= args.since] if args.since else list(months)[-args.months:]
     for month in wanted:
         target = DATA_DIR / months[month]
+        if args.skip_slimmed and (DATA_DIR / "slim" / target.name).exists():
+            print(f"skip {month} (slim cache exists)")
+            continue
         if target.exists() and not args.force:
             print(f"skip {month} (exists, {target.stat().st_size / 1e6:.0f} MB)")
             continue

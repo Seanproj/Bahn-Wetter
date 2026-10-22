@@ -1,0 +1,94 @@
+name: Refresh data (monthly)
+
+# Upstream (piebro/deutsche-bahn-data) publishes each month's processed file on the 2nd, so the
+# forecast tables only change monthly. Downloads new months, re-runs the backtest (fails if the delay
+# forecast no longer beats the line-average baseline), rebuilds the tables, commits the exported JSON
+# to main and redeploys the site.
+
+on:
+  schedule:
+    - cron: "23 6 3 * *"
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Ignore the cached slim data and rebuild every month (e.g. after upstream reprocessing)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+env:
+  # First month with full station coverage upstream (HANDOFF §3.1).
+  DATA_SINCE: "2025-11"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: astral-sh/setup-uv@v7
+
+      # Only the slim cache (~3 MB/month) is kept between runs; full monthly files (~350 MB) are not.
+      - name: Restore slim cache
+        if: ${{ !inputs.rebuild }}
+        uses: actions/cache/restore@v4
+        with:
+          path: data/slim
+          key: slim-${{ hashFiles('config/stations.yaml') }}-${{ github.run_id }}
+          restore-keys: slim-${{ hashFiles('config/stations.yaml') }}-
+
+      - name: Download new months and slim them
+        run: |
+          uv sync
+          uv run python pipeline/download.py --since "$DATA_SINCE" --skip-slimmed
+          uv run python pipeline/slim.py --delete-source
+
+      - name: Save slim cache
+        uses: actions/cache/save@v4
+        with:
+          path: data/slim
+          key: slim-${{ hashFiles('config/stations.yaml') }}-${{ github.run_id }}
+
+      - name: Backtest (quality gate)
+        run: uv run python pipeline/backtest.py --strict
+
+      - name: Build tables and export JSON
+        run: |
+          uv run python pipeline/build_stats.py
+          uv run python pipeline/export.py
+
+      - name: Commit refreshed data
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/model.yaml reports/backtest.md site/public/data
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "chore(data): monthly refresh through $(jq -r .data_until site/public/data/meta.json)"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  # Pushes made with GITHUB_TOKEN do not trigger other workflows, so deploy explicitly.
+  deploy:
+    needs: refresh
+    if: needs.refresh.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: main
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

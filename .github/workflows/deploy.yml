@@ -1,0 +1,85 @@
+name: Build & deploy site
+
+# Builds the static site, renders today's share card into it and deploys to GitHub Pages.
+# Runs daily so the card (and the site's "today") stays fresh even when the data does not change.
+# Pull requests build and render the card as a check, without deploying.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 03:47 UTC = 04:47 (CET) / 05:47 (CEST) in Berlin — the card date is the same calendar day either way.
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build (the data refresh passes main to pick up its own commit)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Build site
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Check Python sources compile
+        run: uv run --no-project python -m py_compile pipeline/*.py cards/*.py
+
+      - name: Install card fonts and browser
+        run: |
+          # Korean text and color emoji for the share card.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji
+          uv sync --group cards
+          uv run --group cards playwright install --with-deps chromium
+
+      - name: Render today's share card
+        run: |
+          day=$(TZ=Europe/Berlin date +%F)
+          uv run --group cards python cards/make_card.py --date "$day" --out "site/dist/cards/$day.png"
+          cp "site/dist/cards/$day.png" site/dist/cards/latest.png
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

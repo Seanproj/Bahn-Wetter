@@ -47,7 +47,7 @@ def main() -> None:
     if not (DIST / "index.html").exists():
         raise SystemExit("site/dist missing — run `cd site && npm run build` first")
 
-    out = args.out or OUT / f"bahn-wetter-{args.date}.png"
+    out = (args.out or OUT / f"bahn-wetter-{args.date}.png").resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     server = serve(DIST)
     try:
