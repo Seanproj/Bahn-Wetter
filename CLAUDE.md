@@ -34,7 +34,10 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
   yourself from `arrival_change_time - arrival_planned_time`.
 - Drop `has_plan_record = false` rows (no planned time, no delay, no train type).
 - Frankfurt Hbf has two EVAs: `08000105` (surface) and `08098105` (S-Bahn tunnel).
-- Corridor lines (2026-07..09): S6, RB68, RE60, ICE (+ rare RB67). Not S3/S4.
+- Corridor lines (2025-11..2026-09): S6, RB68, RE60, ICE (+ rare RB67). Not S3/S4.
+- 2025-11/12 files have bare numeric line numbers ("6"); events.py prefixes the train type.
+- `train_type = "Bus"` rows are planned rail-replacement buses; excluded.
+- Trip (commuter) forecasts = arrival delay at the destination, keyed by origin departure hour.
 
 ## Layout
 ```
@@ -42,13 +45,16 @@ pipeline/            Python 3.12+, managed by uv
   download.py        incremental download of monthly_processed_data from Hugging Face
   explore.py         schema check, station search, corridor analysis → config/stations.yaml
   slim.py            filter monthly files to target EVAs → data/slim/*.parquet
-  build_stats.py     (Phase 1) DuckDB aggregation → probability tables
-  backtest.py        (Phase 1) time-split backtest, Brier, calibration
+  events.py          slim cache → clean stop/trip event tables (all filtering rules live here)
+  model.py           hierarchical Beta-Binomial shrinkage + recency weights
+  backtest.py        time-split backtest, Brier, calibration → config/model.yaml
+  build_stats.py     final probability tables → data/stats/{stop,trip}_cells.parquet
   export.py          (Phase 2) static JSON → site/public/data/
 config/
   station_search.yaml  search patterns for target stations (input)
   stations.yaml        resolved stations + EVA (generated, then committed)
   weather.yaml         probability → weather icon thresholds and copy
+  model.yaml           hyper-parameters chosen by backtest.py (generated)
 site/                static frontend (Phase 2)
 cards/               share-card PNG generation (Phase 3)
 reports/             phase reports, backtest results
@@ -61,6 +67,8 @@ uv sync                                         # install deps
 uv run python pipeline/download.py --months 3   # latest 3 monthly files → data/monthly_processed_data/
 uv run python pipeline/explore.py               # schema + stations + corridor → report & stations.yaml
 uv run python pipeline/slim.py                  # target-station slim cache → data/slim/
+uv run python pipeline/backtest.py              # tune + holdout backtest → reports/backtest.md, config/model.yaml
+uv run python pipeline/build_stats.py           # final probability tables → data/stats/*.parquet
 ```
 
 ## Environment notes
