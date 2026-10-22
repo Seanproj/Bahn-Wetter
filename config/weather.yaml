@@ -1,12 +1,20 @@
-# P(delay >= 6 min) → weather. Thresholds tuned in Phase 1 so the Frankfurt Hbf average (~24%)
-# lands on ☁️ (see reports/phase1_summary.md). Original HANDOFF §5.3 values: 15/30/45/60.
+# P(delay >= 6 min) → forecast level. Thresholds tuned in Phase 1 so the Frankfurt Hbf average (~24%)
+# lands on the middle level (see reports/phase1_summary.md). Original HANDOFF §5.3 values: 15/30/45/60.
+# Each level is shown as a weather icon in detail views and as a fortune grade (운세) on the home page
+# and share card.
 delay_threshold_min: 6
 min_samples: 10
 tornado_cancel_rate: 0.10
 levels:   # evaluated top to bottom; first match wins. Tornado (cancel rate) is checked before these.
-  - {icon: "⛈️", name: storm,  min_p: 0.45, label: "뇌우", text: "중요한 약속이면 한 대 일찍"}
-  - {icon: "🌧️", name: rain,   min_p: 0.30, label: "비",   text: "다음 열차도 확인해 두세요"}
-  - {icon: "☁️", name: cloudy, min_p: 0.20, label: "흐림", text: "커피 한 잔 여유를 챙기세요"}
-  - {icon: "🌤️", name: partly, min_p: 0.10, label: "구름 조금", text: "환승 5분은 아슬아슬"}
-  - {icon: "☀️", name: sunny,  min_p: 0.00, label: "맑음", text: "그냥 타세요"}
-tornado: {icon: "🌪️", name: tornado, label: "토네이도", text: "열차가 사라질 수 있음"}
+  - {icon: "⛈️", name: storm,  min_p: 0.45, label: "뇌우", text: "중요한 약속이면 한 대 일찍",
+     fortune: "대흉", fortune_text: "지각의 기운이 짙습니다. 다른 열차를 고려해 보세요."}
+  - {icon: "🌧️", name: rain,   min_p: 0.30, label: "비",   text: "다음 열차도 확인해 두세요",
+     fortune: "흉", fortune_text: "작은 지연의 기운이 보입니다. 중요한 약속이면 한 대 일찍."}
+  - {icon: "☁️", name: cloudy, min_p: 0.20, label: "흐림", text: "커피 한 잔 여유를 챙기세요",
+     fortune: "평", fortune_text: "평범한 기운. 커피 한 잔 정도의 여유를 챙기세요."}
+  - {icon: "🌤️", name: partly, min_p: 0.10, label: "구름 조금", text: "환승 5분은 아슬아슬",
+     fortune: "길", fortune_text: "무난한 하루. 환승이 있다면 5분 여유를 두세요."}
+  - {icon: "☀️", name: sunny,  min_p: 0.00, label: "맑음", text: "그냥 타세요",
+     fortune: "대길", fortune_text: "시간이 당신 편입니다. 계획대로 도착할 기운이 강해요."}
+tornado: {icon: "🌪️", name: tornado, label: "토네이도", text: "열차가 사라질 수 있음",
+          fortune: "잠수", fortune_text: "열차가 홀연히 사라질 수 있는 날. 대안을 준비하세요."}

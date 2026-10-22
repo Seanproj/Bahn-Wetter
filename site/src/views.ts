@@ -3,7 +3,7 @@
 import type { Data, DayType, Direction, Forecast, LiveTrain } from "./data";
 import { DAYTYPES } from "./data";
 import { DAYTYPE_LABEL, formatDate, type BerlinNow } from "./time";
-import { pct, sampleNote, weatherOf } from "./weather";
+import { freqText, pct, sampleNote, weatherOf } from "./weather";
 
 export interface Ctx {
   now: BerlinNow;
@@ -34,77 +34,129 @@ function detailAttrs(title: string, f: Forecast, trip?: { line: string; directio
   return `data-detail='${esc(JSON.stringify({ title, f, trip }))}'`;
 }
 
-// ── Home: today's forecast for Frankfurt Hbf ─────────────────────────────
+// ── Home: today's fortune (운세) ─────────────────────────────────────────
 
-export function homeSky(data: Data, ctx: Ctx): string {
-  return weatherOf(data.hub.daytypes[ctx.dayType].overall, data.meta).name;
+export function homeSky(): string {
+  return "fortune";
+}
+
+const short = (s: string) => s.replace(" (Main)", "").replace(" Hbf", "");
+
+/** The fortune grade as a coloured word; colour follows the level name. */
+export function gradeTag(f: Forecast | null | undefined, data: Data, cls = "grade"): string {
+  const w = weatherOf(f, data.meta);
+  return `<span class="${cls} g-${w.name}">${esc(w.fortune ?? w.label)}</span>`;
+}
+
+function directionToggle(ctx: Ctx, cls = "toggle"): string {
+  const b = (d: Direction, label: string) =>
+    `<button data-direction="${d}" class="${ctx.direction === d ? "on" : ""}" aria-pressed="${ctx.direction === d}">${label}</button>`;
+  return `<div class="${cls}" role="group" aria-label="방향">${b("ffm_da", "Frankfurt → Darmstadt")}${b("da_ffm", "Darmstadt → Frankfurt")}</div>`;
+}
+
+/** Lucky / careful hour at Frankfurt Hbf for the selected day type (06–23). */
+function luckyHours(data: Data, ctx: Ctx) {
+  const hours = Object.entries(data.hub.daytypes[ctx.dayType].hours)
+    .map(([h, f]) => ({ h: Number(h), f }))
+    .filter(({ h, f }) => h >= 6 && f.p6 !== null);
+  const by = (sign: number) => hours.reduce((m, x) => (sign * (x.f.p6! - m.f.p6!) < 0 ? x : m));
+  return { lucky: by(1), careful: by(-1) };
 }
 
 export function renderHome(data: Data, ctx: Ctx): string {
-  const { meta, hub } = data;
+  const { meta, hub, corridor } = data;
   const day = hub.daytypes[ctx.dayType];
-  const f = day.overall;
-  const w = weatherOf(f, meta);
   const isToday = ctx.dayType === ctx.today;
-  const nowF = isToday ? day.hours[String(ctx.now.hour)] : undefined;
+  const dir = corridor.directions[ctx.direction];
+  const window = bestWindow(ctx);
+  const best = bestTrain(data, ctx.direction, ctx.dayType, window.hours);
+  const { lucky, careful } = luckyHours(data, ctx);
+  const title = isToday
+    ? { "오늘 아침": "오늘의 출근 운세", "오늘 저녁": "오늘의 퇴근 운세" }[window.label] ?? "오늘 밤 열차 운세"
+    : `${DAYTYPE_LABEL[ctx.dayType]} 출근 운세`;
 
-  const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 06–23
+  const slip = best
+    ? (() => {
+        const w = weatherOf(best.f, meta);
+        const others = corridor.lines
+          .filter((l) => l !== best.line)
+          .map((l) => ({ l, f: corridor.cells[ctx.direction][ctx.dayType][l]?.hours[String(best.hour)] }))
+          .filter((o): o is { l: string; f: Forecast } => !!o.f && o.f.p6 !== null)
+          .sort((a, b) => a.f.p6! - b.f.p6!);
+        return `<div class="slip">
+          <div class="slip-grade"><div class="stamp g-${w.name}">${esc(w.fortune ?? w.label)}</div>
+            <div><b>${best.hour}시대 ${esc(best.line)} 타는 당신</b>
+            <span>늦을 확률 ${pct(best.f.p6)} · ${freqText(best.f.p6!)} 늦음</span></div></div>
+          <p class="slip-msg">${esc(w.fortune_text ?? w.text)}<br><em>${best.hour}시대 ${esc(best.line)}</em>이 오늘의 행운 열차.</p>
+          <div class="slip-lucky">
+            <div>🍀 행운의 시간<b>${lucky.h}시 · ${gradeTag(lucky.f, data, "plain")}</b></div>
+            <div>⚠️ 조심할 시간<b>${careful.h}시 · ${gradeTag(careful.f, data, "plain")}</b></div>
+          </div>
+        </div>
+        ${others.length ? `<p class="others-title">같은 ${best.hour}시대 다른 열차</p>
+        <ol class="others">${others
+          .map(({ l, f }) => {
+            const ow = weatherOf(f, meta);
+            return `<li ${detailAttrs(`${l} · ${best.hour}시 출발`, f, { line: l, direction: ctx.direction })} tabindex="0">
+              <span class="badge">${esc(l)}</span><span class="t">${esc((ow.fortune_text ?? ow.text).split(".")[0])}.</span>${gradeTag(f, data)}</li>`;
+          })
+          .join("")}</ol>` : ""}`;
+      })()
+    : `<div class="slip"><p class="slip-msg">이 시간대에는 운세를 볼 만큼 기록이 없어요.</p></div>`;
+
+  const total = day.overall;
+  const nowF = isToday ? day.hours[String(ctx.now.hour)] : undefined;
+  const hours = Array.from({ length: 18 }, (_, i) => i + 6);
   const strip = hours
     .map((h) => {
       const hf = day.hours[String(h)];
       const current = isToday && h === ctx.now.hour;
       return `<li class="hour${current ? " now" : ""}" ${hf ? detailAttrs(`${h}시 · 전체 노선`, hf) : ""} tabindex="0">
-        <span class="h">${current ? "지금" : `${h}시`}</span>
-        ${icon(hf, data)}
-        <span class="p">${pct(hf?.p6)}</span>
-      </li>`;
+        <span class="h">${current ? "지금" : `${h}시`}</span>${gradeTag(hf, data, "hg")}<span class="p">${pct(hf?.p6)}</span></li>`;
     })
     .join("");
-
   const lines = day.lines
     .slice(0, 12)
     .map(
       (l) => `<li class="line-row" ${detailAttrs(`${l.line} · ${DAYTYPE_LABEL[ctx.dayType]} 전체`, l)} tabindex="0">
         <span class="badge">${esc(l.line)}</span>
         <span class="bar"><span style="width:${Math.round((l.p6 ?? 0) * 100)}%"></span></span>
-        <span class="p">${pct(l.p6)}</span>
-        ${icon(l, data)}
-      </li>`,
+        <span class="p">${pct(l.p6)}</span>${gradeTag(l, data, "plain")}</li>`,
     )
     .join("");
 
   return `
-  <section class="hero">
-    <p class="date">${isToday ? formatDate(ctx.now, meta) : `${DAYTYPE_LABEL[ctx.dayType]} 예보`}</p>
-    <h1>${esc(meta.stations[hub.station])}</h1>
-    <div class="big" role="img" aria-label="${esc(w.label)}">${w.icon}</div>
-    <p class="headline"><strong>${pct(f.p6)}</strong> 지연 확률</p>
-    <p class="condition">${esc(w.label)} — ${esc(w.text)}</p>
-    <dl class="stats">
-      <div><dt>15분↑</dt><dd>${pct(f.p15)}</dd></div>
-      <div><dt>30분↑</dt><dd>${pct(f.p30)}</dd></div>
-      <div><dt>취소</dt><dd>${pct(f.pc, 1)}</dd></div>
-    </dl>
-    <p class="note">6분 이상 지연 기준 · ${sampleNote(f)}</p>
+  <section class="fortune">
+    <p class="f-kicker">BAHN-WETTER</p>
+    <h1>🔮 ${title}</h1>
+    <p class="f-sub">${isToday ? formatDate(ctx.now, meta) : `${DAYTYPE_LABEL[ctx.dayType]}`} · ${esc(short(dir.from))} → ${esc(short(dir.to))}</p>
+    ${directionToggle(ctx, "toggle dark")}
+    ${slip}
+  </section>
+
+  <section class="card total">
+    <h2>${esc(meta.stations[hub.station])} 오늘의 총운</h2>
+    <p class="total-main">${gradeTag(total, data, "grade big")}<span>열차 <b>${freqText(total.p6 ?? 0)}</b>가<br>6분 넘게 늦어요</span></p>
+    ${nowF ? `<p class="total-now">지금 ${ctx.now.hour}시대 ${gradeTag(nowF, data, "plain")} · ${pct(nowF.p6)}</p>` : ""}
+    ${isToday && nowF ? liveHub(data, nowF) : ""}
   </section>
 
   ${dayChips(ctx)}
 
-  ${nowF ? `<section class="card now-card">
-    <h2>지금 (${ctx.now.hour}시대)</h2>
-    <p>${icon(nowF, data, "md")} <strong>${pct(nowF.p6)}</strong> · ${esc(weatherOf(nowF, meta).text)}</p>
-    ${isToday ? liveHub(data, nowF) : ""}
-  </section>` : ""}
-
-  <section class="card">
-    <h2>시간대별 예보</h2>
+  <details class="card more">
+    <summary>자세히 보기 <small>시간대별 · 노선별 숫자</small></summary>
+    <dl class="stats left">
+      <div><dt>6분↑</dt><dd>${pct(total.p6)}</dd></div>
+      <div><dt>15분↑</dt><dd>${pct(total.p15)}</dd></div>
+      <div><dt>30분↑</dt><dd>${pct(total.p30)}</dd></div>
+      <div><dt>취소</dt><dd>${pct(total.pc, 1)}</dd></div>
+    </dl>
+    <p class="note">${esc(meta.stations[hub.station])} · ${DAYTYPE_LABEL[ctx.dayType]} · ${sampleNote(total)}</p>
+    <h3>시간대별</h3>
     <ol class="strip" aria-label="시간대별 지연 확률">${strip}</ol>
-  </section>
-
-  <section class="card">
-    <h2>노선별 예보 <small>${DAYTYPE_LABEL[ctx.dayType]} 하루 전체</small></h2>
+    <h3>노선별 <small>하루 전체</small></h3>
     <ol class="lines">${lines}</ol>
-  </section>`;
+  </details>`;
 }
 
 // ── Commute: Frankfurt ↔ Darmstadt ──────────────────────────────────────
@@ -283,19 +335,21 @@ export function renderAbout(data: Data): string {
     .map((l, i, arr) => {
       const hi = arr[i + 1]?.min_p;
       const range = hi === undefined ? `${pct(l.min_p)} 이상` : `${pct(l.min_p)}–${pct(hi)}`;
-      return `<li><span class="wx">${l.icon}</span> <b>${esc(l.label)}</b> ${range} — ${esc(l.text)}</li>`;
+      return `<li><b>${esc(l.fortune ?? "")}</b> · <span class="wx">${l.icon}</span> ${esc(l.label)} — 늦을 확률 ${range}</li>`;
     })
     .join("");
   return `
   <section class="hero compact"><h1>Bahn-Wetter 소개</h1></section>
   <section class="card prose">
     <h2>이게 뭔가요?</h2>
-    <p>Frankfurt (Main) Hbf와 Frankfurt ↔ Darmstadt 출퇴근 구간의 열차 지연 확률을 날씨 예보처럼 보여주는 비공식 재미용 서비스예요.</p>
+    <p>Frankfurt (Main) Hbf와 Frankfurt ↔ Darmstadt 출퇴근 구간의 열차 지연 확률을 운세·캐릭터·뽑기로 보여주는 비공식 재미용 서비스예요.
+       재미있게 보여줄 뿐, 숫자는 모두 실제 운행 기록에서 계산해요.</p>
     <p><b>${esc(DISCLAIMER)}.</b></p>
 
-    <h2>날씨 읽는 법</h2>
+    <h2>운세 읽는 법</h2>
+    <p>지연 확률을 운세 등급으로 보여줘요. 자세한 화면에서는 같은 등급을 날씨 아이콘으로 표시해요.</p>
     <ul class="legend">${levels}
-      <li><span class="wx">${meta.weather.tornado.icon}</span> <b>${esc(meta.weather.tornado.label)}</b> 취소율 ${pct(meta.weather.tornado_cancel_rate)} 이상 — ${esc(meta.weather.tornado.text)}</li>
+      <li><b>${esc(meta.weather.tornado.fortune ?? "")}</b> · <span class="wx">${meta.weather.tornado.icon}</span> ${esc(meta.weather.tornado.label)} — 취소율 ${pct(meta.weather.tornado_cancel_rate)} 이상</li>
     </ul>
     <p>지연은 Deutsche Bahn 공식 기준과 같이 <b>6분 이상</b>이에요. 정차역은 도착 기준, 출발역은 출발 기준이고, 출퇴근 예보는 목적지 도착 기준이에요.</p>
 

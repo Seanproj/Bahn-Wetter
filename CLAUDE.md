@@ -4,8 +4,9 @@
 This file condenses the working rules. If they ever disagree, HANDOFF.md wins — update this file.
 
 ## What this is
-A static website that shows Deutsche Bahn delay probabilities as a weather forecast
-(☀️🌤️☁️🌧️⛈️🌪️). Scope: Frankfurt (Main) Hbf hub + Frankfurt ↔ Darmstadt Hbf commuter corridor.
+A static website that shows Deutsche Bahn delay probabilities in playful formats: a daily fortune
+(운세: 대길…대흉, 잠수) on the home page and share card, train character cards (랭킹) and a delay gacha
+with a "100번 타면" grid (출퇴근 detail sheet). Detail views still use the weather icons (☀️…⛈️🌪️). Scope: Frankfurt (Main) Hbf hub + Frankfurt ↔ Darmstadt Hbf commuter corridor.
 Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later).
 
 ## Hard rules
@@ -42,7 +43,13 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 ## Site conventions
 - Today's day type is computed in the browser (Europe/Berlin time + Hessen holidays from meta.json),
   so the static JSON stays valid between data refreshes.
-- Weather level logic lives only in `site/src/weather.ts`, driven by `config/weather.yaml`.
+- Level logic lives only in `site/src/weather.ts`, driven by `config/weather.yaml`; each level carries both
+  its weather icon and its fortune grade/copy (`fortune`, `fortune_text`).
+- Playful views live in `site/src/fun.ts`: personas are derived from `corridor.json` → `characters`
+  (pipeline/profiles.py) by fixed rules; the gacha picks a bucket from the tapped cell's own p6/p15/pc and a
+  minute value from `dist` quantiles inside that bucket. No invented numbers.
+- Themes per route via body[data-sky]: home/card = "fortune" (night + paper slip), ranking = "dex",
+  commute/about keep the weather sky.
 - The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 plus a small-sample
   penalty 0.67·sqrt(b(1−b)/n), and never picks 🌪️.
 - The ranking is observed data for the last 7 days *of the data*, not the calendar week — always show its dates.
@@ -62,6 +69,7 @@ pipeline/            Python 3.12+, managed by uv
   ranking.py         observed worst/best lines & trains in the last 7 days of data
   conditional.py     P(late arrival | origin departure delay) table + backtest → reports/conditional_backtest.md
   live.py            Timetables API snapshot → live.json (needs DB_CLIENT_ID/DB_API_KEY; --fixtures replays)
+  profiles.py        per-line observed profiles (characters + delay quantiles) for the playful views
   export.py          static JSON → site/public/data/{meta,hub,corridor,ranking}.json
 config/
   station_search.yaml  search patterns for target stations (input)
@@ -69,7 +77,7 @@ config/
   weather.yaml         probability → weather icon thresholds and copy
   model.yaml           hyper-parameters chosen by backtest.py (generated)
   live.yaml            URL of the published live.json (raw.githubusercontent.com, branch live-data) + max age
-site/                Vite + vanilla TS static site (src/: data, time, weather, views, ranking, card, main)
+site/                Vite + vanilla TS static site (src/: data, time, weather, views, fun, ranking, card, main)
 cards/               make_card.py: Playwright screenshot of #/card → cards/out/ (gitignored)
 .github/workflows/   refresh-data.yml (monthly data), deploy.yml (Pages + daily card), live.yml (15-min live feed)
 tests/               pytest; fixtures/timetables = real API responses (2026-09-09 20:36 Berlin), gzipped

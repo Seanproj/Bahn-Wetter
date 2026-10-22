@@ -18,6 +18,8 @@ export interface WeatherLevel {
   label: string;
   text: string;
   min_p?: number;
+  fortune?: string;
+  fortune_text?: string;
 }
 
 export interface Meta {
@@ -60,6 +62,10 @@ export interface Corridor {
   directions: Record<Direction, { from: string; to: string }>;
   lines: string[];
   conditional: Conditional;
+  /** Observed per-line profile, both directions (pipeline/profiles.py) — drives the character cards. */
+  characters: Record<string, { n: number; p6: number; p15: number; p30: number; cancel: number; mean: number; p95: number; max: number; early: number }>;
+  /** 101 quantiles of arrival delay among trains that ran, per direction × line — drives the delay gacha. */
+  dist: Record<Direction, Record<string, number[]>>;
   cells: Record<Direction, Record<DayType, Record<string, {
     overall: Forecast | null;
     hours: Record<string, Forecast>;

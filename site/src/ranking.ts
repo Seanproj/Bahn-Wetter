@@ -1,6 +1,7 @@
-// 🏆 Weekly ranking page: observed results in the last 7 days of data.
+// 🏆 Ranking tab: train character dex on top, then observed results in the last 7 days of data.
 
 import type { Data, RankedLine, RankedTrain } from "./data";
+import { renderDex } from "./fun";
 import { esc } from "./views";
 import { pct } from "./weather";
 
@@ -35,16 +36,17 @@ function lineRow(l: RankedLine, worst: boolean, i: number): string {
   </li>`;
 }
 
-export function renderRanking(data: Data): string {
+export function renderRanking(data: Data, dexLine: string): string {
   const r = data.ranking;
   const big = r.hub.biggest;
   const h = Math.floor(big.delay / 60);
   const bigText = h ? `${h}시간 ${big.delay % 60}분` : `${big.delay}분`;
   return `
-  <section class="hero compact">
-    <p class="date">${md(r.window.from)} – ${md(r.window.to)} 실제 기록</p>
-    <h1>🏆 주간 랭킹</h1>
-    <p class="note">데이터 마지막 7일 동안 실제로 얼마나 늦었는지 (6분 이상 지연 비율)</p>
+  ${renderDex(data, dexLine)}
+
+  <section class="week-head">
+    <h2>🏆 주간 기록</h2>
+    <p>${md(r.window.from)} – ${md(r.window.to)} · 데이터 마지막 7일 동안 실제로 얼마나 늦었는지</p>
   </section>
 
   <section class="card biggest">

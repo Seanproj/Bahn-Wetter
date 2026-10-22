@@ -4,6 +4,7 @@
 - hub.json       Frankfurt Hbf: overall, per day type and hour (all lines combined), per line
 - corridor.json  Frankfurt Hbf ↔ Darmstadt Hbf trips: direction × day type × line × departure hour,
                  plus `conditional`: arrival-delay probability by origin-departure-delay bin (conditional.py)
+                 and `characters` / `dist`: per-line profiles for the playful views (profiles.py)
 - ranking.json   observed worst/best lines and trains in the last 7 days of data (ranking.py)
 
 Every forecast carries n (sample size). Cells with n < min_samples have p = null ("데이터 부족").
@@ -25,6 +26,7 @@ import yaml
 
 from events import load_stations, load_stops, load_trips
 from conditional import export_table
+from profiles import line_profiles
 from ranking import weekly_ranking
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -134,6 +136,7 @@ def main() -> None:
     corridor = export_corridor(trips, cfg, n_days)
     # Phase 5: arrival-delay probability given how late the train already is at its origin.
     corridor["conditional"] = export_table(trip_events, corridor["lines"], MIN_N)
+    corridor.update(line_profiles(trip_events, corridor["lines"], MIN_N))  # characters + delay quantiles
     files = {
         "meta.json": meta,
         "hub.json": export_hub(stops, cfg["hub"]),

@@ -1,6 +1,7 @@
 import "./style.css";
 import { loadData, loadLive, type Data, type DayType, type Direction, type Forecast } from "./data";
 import { cardSky, renderCard } from "./card";
+import { gachaBlock, spin } from "./fun";
 import { renderRanking } from "./ranking";
 import { berlinDay, berlinNow, dayTypeOf } from "./time";
 import { commuteSky, conditionalTable, esc, homeSky, renderAbout, renderCommute, renderFooter, renderHome, type Ctx } from "./views";
@@ -32,6 +33,7 @@ let data: Data;
 const now = berlinNow();
 let dayType: DayType | null = null; // null = today
 let direction: Direction = store<Direction>("direction", "ffm_da");
+let dexLine = store<string>("dexLine", "");
 
 /** "#/card?date=2026-10-23" → { route: "card", params } */
 function parseHash(): { route: Route; params: URLSearchParams } {
@@ -48,11 +50,11 @@ function render() {
   const ctx: Ctx = { now: at, today, dayType: r === "card" ? today : (dayType ?? today), direction };
   document.body.classList.toggle("card-mode", r === "card");
   const view = {
-    home: () => [renderHome(data, ctx), homeSky(data, ctx)],
+    home: () => [renderHome(data, ctx), homeSky()],
     commute: () => [renderCommute(data, ctx), commuteSky(data, ctx)],
-    ranking: () => [renderRanking(data), "about"],
+    ranking: () => [renderRanking(data, dexLine), "dex"],
     about: () => [renderAbout(data), "about"],
-    card: () => [renderCard(data, ctx), cardSky(data, ctx)],
+    card: () => [renderCard(data, ctx), cardSky()],
   }[r];
   const [html, sky] = view();
   app.innerHTML = html;
@@ -79,6 +81,7 @@ function openDetail(title: string, f: Forecast, trip?: { line: string; direction
       <div><dt>취소</dt><dd>${pct(f.pc, 1)}</dd></div>
     </dl>
     <p class="note">${sampleNote(f)}${f.p6 === null ? ` · 표본이 ${data.meta.weather.min_samples}회 미만이라 확률을 숨겼어요` : ""}</p>
+    ${gachaBlock(data, f, trip)}
     ${trip ? conditionalTable(data, trip) : ""}
     <button class="close">닫기</button>
   </form>`;
@@ -99,6 +102,14 @@ app.addEventListener("click", (e) => {
     save("direction", direction);
     return render();
   }
+  const line = t.closest<HTMLElement>("[data-line]");
+  if (line) {
+    dexLine = line.dataset.line!;
+    save("dexLine", dexLine);
+    render();
+    app.querySelector(".dex-card")?.scrollIntoView({ block: "nearest" });
+    return;
+  }
   const detail = t.closest<HTMLElement>("[data-detail]");
   if (detail) {
     const { title, f, trip } = JSON.parse(detail.dataset.detail!);
@@ -112,6 +123,13 @@ app.addEventListener("keydown", (e) => {
   }
 });
 sheet.addEventListener("click", (e) => {
+  const spinBtn = (e.target as HTMLElement).closest("[data-spin]");
+  if (spinBtn) {
+    e.preventDefault();
+    spin(spinBtn.closest<HTMLElement>(".gacha")!);
+    spinBtn.textContent = "🎲 한 번 더 타기";
+    return;
+  }
   if (e.target === sheet) sheet.close(); // tap on backdrop
 });
 window.addEventListener("hashchange", () => {
