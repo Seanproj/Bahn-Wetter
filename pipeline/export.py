@@ -2,7 +2,8 @@
 
 - meta.json      data range, weather thresholds/copy, Hessen holidays, attribution
 - hub.json       Frankfurt Hbf: overall, per day type and hour (all lines combined), per line
-- corridor.json  Frankfurt Hbf ↔ Darmstadt Hbf trips: direction × day type × line × departure hour
+- corridor.json  Frankfurt Hbf ↔ Darmstadt Hbf trips: direction × day type × line × departure hour,
+                 plus `conditional`: arrival-delay probability by origin-departure-delay bin (conditional.py)
 - ranking.json   observed worst/best lines and trains in the last 7 days of data (ranking.py)
 
 Every forecast carries n (sample size). Cells with n < min_samples have p = null ("데이터 부족").
@@ -23,6 +24,7 @@ import pandas as pd
 import yaml
 
 from events import load_stations, load_stops, load_trips
+from conditional import export_table
 from ranking import weekly_ranking
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -119,6 +121,7 @@ def main() -> None:
         "weather": WEATHER,
         "holidays_he": {d.isoformat(): name for d, name in sorted(hol.items())},
         "stations": {k: v["name"] for k, v in cfg["stations"].items()},
+        "live": yaml.safe_load((ROOT / "config" / "live.yaml").read_text()),
         "attribution": {
             "text": "Daten: Deutsche Bahn (CC BY 4.0), via piebro/deutsche-bahn-data",
             "license_url": "https://creativecommons.org/licenses/by/4.0/",
@@ -126,13 +129,17 @@ def main() -> None:
         },
     }
     OUT.mkdir(parents=True, exist_ok=True)
+    events = load_stops()
+    trip_events = load_trips(events)
+    corridor = export_corridor(trips, cfg, n_days)
+    # Phase 5: arrival-delay probability given how late the train already is at its origin.
+    corridor["conditional"] = export_table(trip_events, corridor["lines"], MIN_N)
     files = {
         "meta.json": meta,
         "hub.json": export_hub(stops, cfg["hub"]),
-        "corridor.json": export_corridor(trips, cfg, n_days),
+        "corridor.json": corridor,
+        "ranking.json": weekly_ranking(events, trip_events, cfg["hub"], meta["stations"]),
     }
-    events = load_stops()
-    files["ranking.json"] = weekly_ranking(events, load_trips(events), cfg["hub"], meta["stations"])
     for name, obj in files.items():
         path = OUT / name
         path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))

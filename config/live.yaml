@@ -1,0 +1,5 @@
+# Phase 5 live feed. .github/workflows/live.yml publishes live.json to the orphan branch `live-data`;
+# the site reads it from raw.githubusercontent.com (CORS-enabled, ~5 min CDN cache).
+# Set url to "" to switch the live UI off.
+url: https://raw.githubusercontent.com/Seanproj/Bahn-Wetter/live-data/live.json
+max_age_min: 30   # older snapshots are ignored (workflow runs every 15 min)

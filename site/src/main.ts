@@ -1,9 +1,9 @@
 import "./style.css";
-import { loadData, type Data, type DayType, type Direction, type Forecast } from "./data";
+import { loadData, loadLive, type Data, type DayType, type Direction, type Forecast } from "./data";
 import { cardSky, renderCard } from "./card";
 import { renderRanking } from "./ranking";
 import { berlinDay, berlinNow, dayTypeOf } from "./time";
-import { commuteSky, esc, homeSky, renderAbout, renderCommute, renderFooter, renderHome, type Ctx } from "./views";
+import { commuteSky, conditionalTable, esc, homeSky, renderAbout, renderCommute, renderFooter, renderHome, type Ctx } from "./views";
 import { pct, sampleNote, weatherOf } from "./weather";
 
 type Route = "home" | "commute" | "ranking" | "about" | "card";
@@ -67,7 +67,7 @@ function render() {
   if (nowRow && wrap) wrap.scrollTop = nowRow.offsetTop - wrap.clientHeight / 3;
 }
 
-function openDetail(title: string, f: Forecast) {
+function openDetail(title: string, f: Forecast, trip?: { line: string; direction: Direction }) {
   const w = weatherOf(f, data.meta);
   sheet.innerHTML = `<form method="dialog">
     <p class="sheet-title">${esc(title)}</p>
@@ -79,6 +79,7 @@ function openDetail(title: string, f: Forecast) {
       <div><dt>취소</dt><dd>${pct(f.pc, 1)}</dd></div>
     </dl>
     <p class="note">${sampleNote(f)}${f.p6 === null ? ` · 표본이 ${data.meta.weather.min_samples}회 미만이라 확률을 숨겼어요` : ""}</p>
+    ${trip ? conditionalTable(data, trip) : ""}
     <button class="close">닫기</button>
   </form>`;
   sheet.showModal();
@@ -100,8 +101,8 @@ app.addEventListener("click", (e) => {
   }
   const detail = t.closest<HTMLElement>("[data-detail]");
   if (detail) {
-    const { title, f } = JSON.parse(detail.dataset.detail!);
-    openDetail(title, f);
+    const { title, f, trip } = JSON.parse(detail.dataset.detail!);
+    openDetail(title, f, trip);
   }
 });
 app.addEventListener("keydown", (e) => {
@@ -123,6 +124,13 @@ loadData()
     data = d;
     footer.innerHTML = renderFooter(d);
     render();
+    // Live data is optional: render first, then add it if a fresh snapshot exists (not on the card).
+    loadLive(d.meta).then((live) => {
+      if (live && parseHash().route !== "card") {
+        data.live = live;
+        render();
+      }
+    });
   })
   .catch((err) => {
     app.innerHTML = `<section class="card"><h2>예보를 불러오지 못했어요</h2><p class="note">${String(err)}</p></section>`;

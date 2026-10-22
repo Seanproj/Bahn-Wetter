@@ -100,7 +100,7 @@ def load_trips(stops: pd.DataFrame) -> pd.DataFrame:
     """
     ffm = stops[stops["station"] == "frankfurt_hbf"]
     da = stops[stops["station"] == "darmstadt_hbf"]
-    cols = ["ride_key", "stop_num", "dep_planned", "dep_canceled", "planned", "delay", "canceled", "line", "train_type", "train_number"]
+    cols = ["ride_key", "stop_num", "dep_planned", "dep_delay", "dep_canceled", "planned", "delay", "canceled", "line", "train_type", "train_number"]
     m = ffm[cols].merge(da[cols], on="ride_key", suffixes=("_ffm", "_da"))
     south = m["stop_num_ffm"] < m["stop_num_da"]
     o = lambda c: m[f"{c}_ffm"].where(south, m[f"{c}_da"])  # origin side
@@ -113,6 +113,7 @@ def load_trips(stops: pd.DataFrame) -> pd.DataFrame:
         "train_number": m["train_number_ffm"],
         "planned": pd.to_datetime(o("dep_planned")),
         "arr_planned": pd.to_datetime(d("planned")),
+        "dep_delay": o("dep_delay"),  # departure delay at the origin (the live "delayed now" signal)
         "delay": d("delay"),
         "canceled": (o("dep_canceled").fillna(False) | d("canceled").fillna(False)).astype(bool),
     })

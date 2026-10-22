@@ -1,6 +1,6 @@
 // Page renderers. Each returns an HTML string; main.ts wires up events after rendering.
 
-import type { Data, DayType, Direction, Forecast } from "./data";
+import type { Data, DayType, Direction, Forecast, LiveTrain } from "./data";
 import { DAYTYPES } from "./data";
 import { DAYTYPE_LABEL, formatDate, type BerlinNow } from "./time";
 import { pct, sampleNote, weatherOf } from "./weather";
@@ -29,9 +29,9 @@ function icon(f: Forecast | null | undefined, data: Data, cls = ""): string {
   return `<span class="wx ${cls}" role="img" aria-label="${esc(w.label)}">${w.icon}</span>`;
 }
 
-/** Data attributes so a tap can open the detail sheet. */
-function detailAttrs(title: string, f: Forecast): string {
-  return `data-detail='${esc(JSON.stringify({ title, f }))}'`;
+/** Data attributes so a tap can open the detail sheet. Corridor cells also pass line + direction. */
+function detailAttrs(title: string, f: Forecast, trip?: { line: string; direction: Direction }): string {
+  return `data-detail='${esc(JSON.stringify({ title, f, trip }))}'`;
 }
 
 // ── Home: today's forecast for Frankfurt Hbf ─────────────────────────────
@@ -93,6 +93,7 @@ export function renderHome(data: Data, ctx: Ctx): string {
   ${nowF ? `<section class="card now-card">
     <h2>지금 (${ctx.now.hour}시대)</h2>
     <p>${icon(nowF, data, "md")} <strong>${pct(nowF.p6)}</strong> · ${esc(weatherOf(nowF, meta).text)}</p>
+    ${isToday ? liveHub(data, nowF) : ""}
   </section>` : ""}
 
   <section class="card">
@@ -170,8 +171,9 @@ export function renderCommute(data: Data, ctx: Ctx): string {
         .map((l) => {
           const f = cells[l]?.hours[String(h)];
           if (!f) return `<td class="empty" aria-label="운행 없음"></td>`;
-          if (f.p6 === null) return `<td class="thin" ${detailAttrs(`${l} · ${h}시 출발`, f)} tabindex="0"><span>부족</span></td>`;
-          return `<td ${detailAttrs(`${l} · ${h}시 출발`, f)} tabindex="0">${icon(f, data)}<span>${pct(f.p6)}</span></td>`;
+          const trip = { line: l, direction: ctx.direction };
+          if (f.p6 === null) return `<td class="thin" ${detailAttrs(`${l} · ${h}시 출발`, f, trip)} tabindex="0"><span>부족</span></td>`;
+          return `<td ${detailAttrs(`${l} · ${h}시 출발`, f, trip)} tabindex="0">${icon(f, data)}<span>${pct(f.p6)}</span></td>`;
         })
         .join("");
       return `<tr class="${current ? "now" : ""}"><th scope="row">${String(h).padStart(2, "0")}시</th>${tds}</tr>`;
@@ -192,12 +194,14 @@ export function renderCommute(data: Data, ctx: Ctx): string {
 
   <section class="card best">
     <h2>${window.label} 가장 맑은 열차</h2>
-    ${best ? `<p class="best-line" ${detailAttrs(`${best.line} · ${best.hour}시 출발`, best.f)} tabindex="0">
+    ${best ? `<p class="best-line" ${detailAttrs(`${best.line} · ${best.hour}시 출발`, best.f, { line: best.line, direction: ctx.direction })} tabindex="0">
         ${icon(best.f, data, "md")}
         <span><strong>${best.hour}시대 ${esc(best.line)}</strong><br>
         <small>${esc(dir.to)} 도착 지연 ${pct(best.f.p6)} · 취소 ${pct(best.f.pc, 1)} · ${sampleNote(best.f)}</small></span>
       </p>` : `<p>이 시간대에는 예보할 데이터가 부족해요.</p>`}
   </section>
+
+  ${isToday ? liveCorridor(data, ctx) : ""}
 
   <section class="card">
     <h2>시간대 × 노선 <small>${esc(dir.from)} 출발 시각 기준</small></h2>
@@ -209,6 +213,65 @@ export function renderCommute(data: Data, ctx: Ctx): string {
       </table>
     </div>
   </section>`;
+}
+
+// ── Live (Phase 5) ──────────────────────────────────────────────────────
+
+/** "실황": what is happening at Frankfurt Hbf right now, next to the forecast for this hour. */
+function liveHub(data: Data, forecast: Forecast): string {
+  const live = data.live;
+  if (!live || live.hub.p6 === null) return "";
+  const h = live.hub;
+  const obs = { n: h.n, p6: h.p6, p15: null, p30: null, pc: h.n ? h.canceled / h.n : null };
+  const diff = h.p6! - (forecast.p6 ?? 0);
+  const verdict = Math.abs(diff) < 0.05 ? "예보와 비슷해요" : diff > 0 ? "예보보다 흐려요" : "예보보다 맑아요";
+  return `<p class="live-row"><span class="live-dot" aria-hidden="true"></span><b>실황 ${live.snapshot.slice(11)}</b>
+    ${icon(obs, data)} <strong>${pct(h.p6)}</strong> · ${verdict}
+    <small>앞뒤 ${h.window_min}분 열차 ${h.n}대 중 ${h.delayed6}대 6분↑${h.canceled ? ` · 취소 ${h.canceled}` : ""}</small></p>`;
+}
+
+function liveStatus(t: LiveTrain): string {
+  if (t.canceled) return `<span class="st bad">취소</span>`;
+  const d = t.delay_now;
+  const label = d <= 0 ? "정시" : `+${d}분`;
+  return `<span class="st ${d >= 6 ? "bad" : d >= 2 ? "warn" : "ok"}">${label}${t.departed ? " · 출발" : ""}</span>`;
+}
+
+/** Upcoming departures with their current delay and the resulting arrival-delay probability. */
+function liveCorridor(data: Data, ctx: Ctx): string {
+  const live = data.live;
+  if (!live) return "";
+  const trains = live.corridor[ctx.direction].filter((t) => !t.departed || t.canceled).slice(0, 6);
+  if (!trains.length) return "";
+  const dir = data.corridor.directions[ctx.direction];
+  const rows = trains
+    .map((t) => {
+      const f: Forecast = { n: t.n ?? 0, p6: t.p6, p15: t.p15, p30: null, pc: t.canceled ? 1 : 0 };
+      return `<li class="live-train">
+        <span class="t">${t.delay_now > 0 && !t.canceled ? `<s>${t.dep_planned}</s> ${t.dep_expected}` : t.dep_planned}</span>
+        <span class="badge">${esc(t.line)}</span>
+        ${liveStatus(t)}
+        <span class="risk">${t.canceled ? "🌪️" : `${icon(f, data)} ${pct(t.p6)}`}</span>
+      </li>`;
+    })
+    .join("");
+  return `<section class="card live">
+    <h2><span class="live-dot" aria-hidden="true"></span>곧 출발 <small>실시간 ${live.snapshot.slice(11)} · ${esc(dir.to)} 도착 6분↑ 확률</small></h2>
+    <ol class="live-list">${rows}</ol>
+    <p class="note">지금 지연을 반영한 확률이에요. 출발이 늦을수록 도착 지연 확률이 크게 올라가요.</p>
+  </section>`;
+}
+
+/** Detail-sheet table: arrival-delay probability by how late this line leaves. */
+export function conditionalTable(data: Data, trip: { line: string; direction: Direction }): string {
+  const c = data.corridor.conditional;
+  const cells = c?.cells[trip.direction]?.[trip.line];
+  if (!cells) return "";
+  const rows = cells
+    .map((cell, i) => (cell ? `<tr><th scope="row">${c.bins[i]}</th><td>${icon({ n: cell.n, p6: cell.p6, p15: cell.p15, p30: null, pc: null }, data)} ${pct(cell.p6)}</td><td>${pct(cell.p15)}</td></tr>` : ""))
+    .join("");
+  return `<div class="cond"><p class="cond-title">출발이 늦으면? <small>${esc(data.corridor.directions[trip.direction].to)} 도착 지연 확률</small></p>
+    <table><thead><tr><th scope="col">출발 지연</th><th scope="col">6분↑</th><th scope="col">15분↑</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // ── About ───────────────────────────────────────────────────────────────
@@ -241,6 +304,11 @@ export function renderAbout(data: Data): string {
        표본이 적은 칸은 상위 묶음(노선 전체, 역 전체)의 비율 쪽으로 당겨 보정하고(Beta-Binomial 축소), 최근 기록에 조금 더 무게를 줘요.
        표본이 ${meta.weather.min_samples}회 미만인 칸은 "데이터 부족"으로 표시해요.</p>
     <p>정확도는 시간 순서대로 나눈 백테스트로 확인했어요. 지난 달까지의 데이터로 다음 한 달을 예측했을 때, 역 평균이나 노선 평균만 쓰는 것보다 지연 예보가 더 잘 맞았어요. 취소는 파업·공사 영향이 커서 예측력이 거의 없어요.</p>
+
+    <h2>실시간 반영</h2>
+    <p>Deutsche Bahn Timetables API에서 15분마다 현재 운행 상황을 받아 와요. "곧 출발" 목록과 "실황"은 그때의 지연을 보여주고,
+       도착 지연 확률은 과거 기록에서 <b>출발이 그만큼 늦었던 열차가 실제로 얼마나 늦게 도착했는지</b>로 계산해요.
+       출퇴근 표의 칸을 누르면 "출발이 늦으면?" 표에서 노선별로 볼 수 있어요. 실시간 데이터가 없거나 30분 넘게 지나면 표시하지 않아요.</p>
 
     <h2>데이터 출처</h2>
     <p>${esc(meta.attribution.text.split(",")[0])}, via <a href="${meta.attribution.source_url}" rel="noopener">piebro/deutsche-bahn-data</a>.

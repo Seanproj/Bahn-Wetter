@@ -33,6 +33,7 @@ export interface Meta {
   };
   holidays_he: Record<string, string>;
   stations: Record<string, string>;
+  live: { url: string; max_age_min: number };
   attribution: { text: string; license_url: string; source_url: string };
 }
 
@@ -48,9 +49,17 @@ export interface Hub {
 
 export type Direction = "ffm_da" | "da_ffm";
 
+/** Arrival-delay probability given the delay at the origin (pipeline/conditional.py). */
+export interface Conditional {
+  bins: string[];
+  edges: number[];
+  cells: Record<Direction, Record<string, ({ n: number; p6: number; p15: number } | null)[]>>;
+}
+
 export interface Corridor {
   directions: Record<Direction, { from: string; to: string }>;
   lines: string[];
+  conditional: Conditional;
   cells: Record<Direction, Record<DayType, Record<string, {
     overall: Forecast | null;
     hours: Record<string, Forecast>;
@@ -93,11 +102,36 @@ export interface Ranking {
   corridor: { trains_worst: RankedTrain[]; trains_best: RankedTrain[] };
 }
 
+/** Live snapshot written by pipeline/live.py (every 15 min once an API key is configured). */
+export interface LiveTrain {
+  line: string;
+  train_type: string;
+  number: string;
+  dep_planned: string;
+  dep_expected: string;
+  arr_planned: string;
+  delay_now: number;
+  departed: boolean;
+  canceled: boolean;
+  p6: number | null;
+  p15: number | null;
+  n: number | null;
+}
+
+export interface Live {
+  generated_at: string;
+  snapshot: string;
+  source: "api" | "fixtures";
+  hub: { window_min: number; n: number; delayed6: number; canceled: number; p6: number | null };
+  corridor: Record<Direction, LiveTrain[]>;
+}
+
 export interface Data {
   meta: Meta;
   hub: Hub;
   corridor: Corridor;
   ranking: Ranking;
+  live: Live | null; // filled in after first render, if a fresh snapshot exists
 }
 
 async function getJson<T>(name: string): Promise<T> {
@@ -113,5 +147,21 @@ export async function loadData(): Promise<Data> {
     getJson<Corridor>("corridor.json"),
     getJson<Ranking>("ranking.json"),
   ]);
-  return { meta, hub, corridor, ranking };
+  return { meta, hub, corridor, ranking, live: null };
+}
+
+/** Fresh live snapshot or null (no URL configured, unreachable, too old, or replayed fixtures). */
+export async function loadLive(meta: Meta): Promise<Live | null> {
+  if (!meta.live?.url) return null;
+  try {
+    const bucket = Math.floor(Date.now() / 300_000); // follow the ~5 min CDN cache, not every request
+    const res = await fetch(`${meta.live.url}?t=${bucket}`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const live = (await res.json()) as Live;
+    const ageMin = (Date.now() - new Date(live.generated_at).getTime()) / 60_000;
+    if (live.source !== "api" || !(ageMin >= -5 && ageMin <= meta.live.max_age_min)) return null;
+    return live;
+  } catch {
+    return null;
+  }
 }

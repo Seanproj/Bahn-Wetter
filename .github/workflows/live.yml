@@ -1,0 +1,62 @@
+name: Live snapshot
+
+# Phase 5: every 15 minutes during service hours, fetch the DB Timetables API (pipeline/live.py) and
+# publish live.json to the orphan branch `live-data`. The site reads it from raw.githubusercontent.com,
+# so no Pages redeploy is needed. The branch is force-pushed with a single commit (no history growth).
+#
+# Needs repository secrets DB_CLIENT_ID and DB_API_KEY. Until they exist the job skips itself and stays green.
+
+on:
+  schedule:
+    # UTC; covers about 05:00–23:00 Berlin in summer and 04:00–22:00 in winter.
+    - cron: "*/15 3-21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    env:
+      DB_CLIENT_ID: ${{ secrets.DB_CLIENT_ID }}
+      DB_API_KEY: ${{ secrets.DB_API_KEY }}
+    steps:
+      - name: Check credentials
+        id: creds
+        run: |
+          if [ -z "$DB_CLIENT_ID" ] || [ -z "$DB_API_KEY" ]; then
+            echo "::notice::DB_CLIENT_ID / DB_API_KEY secrets are not set — skipping the live snapshot"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.ok == 'true'
+        with:
+          ref: main
+
+      - uses: astral-sh/setup-uv@v7
+        if: steps.creds.outputs.ok == 'true'
+
+      # live.py needs only the standard library and PyYAML, so skip the full project sync.
+      - name: Fetch snapshot
+        if: steps.creds.outputs.ok == 'true'
+        run: uv run --no-project --with pyyaml python pipeline/live.py --out out/live.json
+
+      - name: Publish to live-data branch
+        if: steps.creds.outputs.ok == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          git init -q -b live-data
+          git add live.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "live snapshot $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live-data

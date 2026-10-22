@@ -65,6 +65,7 @@ jobs:
       - name: Build tables and export JSON
         run: |
           uv run python pipeline/build_stats.py
+          uv run python pipeline/conditional.py
           uv run python pipeline/export.py
 
       - name: Commit refreshed data
@@ -72,7 +73,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config/model.yaml reports/backtest.md site/public/data
+          git add config/model.yaml reports/backtest.md reports/conditional_backtest.md site/public/data
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0

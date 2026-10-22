@@ -51,6 +51,9 @@ jobs:
       - name: Check Python sources compile
         run: uv run --no-project python -m py_compile pipeline/*.py cards/*.py
 
+      - name: Run tests
+        run: uv run pytest -q tests
+
       - name: Install card fonts and browser
         run: |
           # Korean text and color emoji for the share card.

@@ -60,15 +60,19 @@ pipeline/            Python 3.12+, managed by uv
   backtest.py        time-split backtest, Brier, calibration → config/model.yaml
   build_stats.py     final probability tables → data/stats/{stop,trip}_cells.parquet
   ranking.py         observed worst/best lines & trains in the last 7 days of data
+  conditional.py     P(late arrival | origin departure delay) table + backtest → reports/conditional_backtest.md
+  live.py            Timetables API snapshot → live.json (needs DB_CLIENT_ID/DB_API_KEY; --fixtures replays)
   export.py          static JSON → site/public/data/{meta,hub,corridor,ranking}.json
 config/
   station_search.yaml  search patterns for target stations (input)
   stations.yaml        resolved stations + EVA (generated, then committed)
   weather.yaml         probability → weather icon thresholds and copy
   model.yaml           hyper-parameters chosen by backtest.py (generated)
+  live.yaml            URL of the published live.json (raw.githubusercontent.com, branch live-data) + max age
 site/                Vite + vanilla TS static site (src/: data, time, weather, views, ranking, card, main)
 cards/               make_card.py: Playwright screenshot of #/card → cards/out/ (gitignored)
-.github/workflows/   refresh-data.yml (monthly data), deploy.yml (Pages + daily card)
+.github/workflows/   refresh-data.yml (monthly data), deploy.yml (Pages + daily card), live.yml (15-min live feed)
+tests/               pytest; fixtures/timetables = real API responses (2026-09-09 20:36 Berlin), gzipped
 reports/             phase reports, backtest results
 data/                gitignored: raw downloads + slim cache
 ```
@@ -83,6 +87,10 @@ uv run python pipeline/backtest.py              # tune + holdout backtest → re
 uv run python pipeline/build_stats.py           # final probability tables → data/stats/*.parquet
 uv run python pipeline/export.py                # static JSON → site/public/data/ (committed)
 cd site && npm install && npm run dev           # local site (npm run build → site/dist/)
+uv run python pipeline/conditional.py           # departure-delay conditional backtest report
+uv run python pipeline/live.py --out live/live.json   # live snapshot (skips without API key)
+uv run python pipeline/live.py --fixtures tests/fixtures/timetables --now 2026-09-09T20:36 --out /tmp/live.json
+uv run pytest -q tests
 uv run --group cards python cards/make_card.py [--date YYYY-MM-DD]   # 1080×1350 share card → cards/out/
 #   needs site/dist; set CHROMIUM_PATH=/opt/pw-browsers/chromium in the cloud container
 ```
@@ -94,7 +102,16 @@ uv run --group cards python cards/make_card.py [--date YYYY-MM-DD]   # 1080×135
 - `deploy.yml` — on push to main, daily 03:47 UTC, manual, or called by the refresh: build site, render
   today's card to `site/dist/cards/{YYYY-MM-DD,latest}.png`, deploy to GitHub Pages. PRs build + render only.
 - Backtest folds roll with the data (holdout = latest 4 months, tune = 4 before).
+- `live.yml` — every 15 min 03–21 UTC: live.py → force-push `live.json` to orphan branch `live-data`.
+  Skips (green) until repo secrets DB_CLIENT_ID / DB_API_KEY exist.
 - Repo settings needed: Pages source = "GitHub Actions"; default branch = main (schedules run there only).
+
+## Live data (Phase 5)
+- API: `timetables/v1/plan/{eva}/{yymmdd}/{HH}` + `timetables/v1/fchg/{eva}`, headers DB-Client-Id / DB-Api-Key.
+  XML times are Berlin local; `cs="c"` = canceled; no change entry = on time.
+- Corridor runs in live data use the same ride_key rule as history (id minus trailing stop number).
+- The API key never reaches the browser: the site only reads the published live.json, and ignores it when
+  older than `max_age_min` or when `source != "api"` (fixture replays never show up on the real site).
 
 ## Environment notes
 - Data source: `huggingface.co` (dataset `piebro/deutsche-bahn-data`). Downloads may also redirect to
