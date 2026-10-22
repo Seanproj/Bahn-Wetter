@@ -21,9 +21,20 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - `data/` is gitignored. Work from the slim parquet cache (`data/slim/`), not the full monthly files.
 - No DB logo/brand. Do not use "DB" alone as the name.
 - Footer must show: `Daten: Deutsche Bahn (CC BY 4.0), via piebro/deutsche-bahn-data` + unofficial notice.
+  CC BY 4.0 also requires a license link and a note that the data was processed (aggregated into
+  probabilities); put both on the About page.
 - Fixed disclaimer: "과거 패턴 기반 예보이며 파업·사고 등 돌발 상황은 반영되지 않습니다".
 - Work in phases (HANDOFF §8). Stop at the end of each phase, report, wait for OK.
 - Commit at meaningful units; English conventional-commit messages.
+
+## Data facts (verified in Phase 0, see reports/phase0_summary.md)
+- `train_line_ride_id` is a recurring timetable-pattern ID, **not** a single run. A single run is
+  `ride_key = regexp_replace(id, '-[0-9]+$', '')`.
+- `delay_in_min` is departure-based (arrival-based only at terminal stops). Compute arrival delay
+  yourself from `arrival_change_time - arrival_planned_time`.
+- Drop `has_plan_record = false` rows (no planned time, no delay, no train type).
+- Frankfurt Hbf has two EVAs: `08000105` (surface) and `08098105` (S-Bahn tunnel).
+- Corridor lines (2026-07..09): S6, RB68, RE60, ICE (+ rare RB67). Not S3/S4.
 
 ## Layout
 ```

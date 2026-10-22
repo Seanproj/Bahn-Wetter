@@ -1,0 +1,126 @@
+generated_by: pipeline/explore.py
+generated_at: '2026-10-22'
+source_files:
+- data-2026-07.parquet
+- data-2026-08.parquet
+- data-2026-09.parquet
+hub: frankfurt_hbf
+corridor_order:
+- frankfurt_hbf
+- frankfurt_sued
+- frankfurt_louisa
+- neu_isenburg
+- dreieich_buchschlag
+- langen
+- egelsbach
+- erzhausen
+- darmstadt_wixhausen
+- darmstadt_arheilgen
+- darmstadt_hbf
+stations:
+  frankfurt_hbf:
+    name: Frankfurt (Main) Hbf
+    eva:
+    - 08000105
+    - 08098105
+  frankfurt_sued:
+    name: Frankfurt (Main) Süd
+    eva:
+    - 08002041
+  frankfurt_louisa:
+    name: Frankfurt-Louisa
+    eva:
+    - 08002047
+  neu_isenburg:
+    name: Neu Isenburg
+    eva:
+    - 08004246
+  dreieich_buchschlag:
+    name: Dreieich-Buchschlag
+    eva:
+    - 08001236
+  langen:
+    name: Langen (Hess)
+    eva:
+    - 08003523
+  egelsbach:
+    name: Egelsbach
+    eva:
+    - 08001672
+  erzhausen:
+    name: Erzhausen
+    eva:
+    - 08001864
+  darmstadt_wixhausen:
+    name: Darmstadt-Wixhausen
+    eva:
+    - 08006528
+  darmstadt_arheilgen:
+    name: Darmstadt-Arheilgen
+    eva:
+    - 08001378
+  darmstadt_hbf:
+    name: Darmstadt Hbf
+    eva:
+    - 08000068
+corridor_lines:
+- train_type: S
+  line: S6
+  rides_ffm_da: 2754
+  rides_da_ffm: 2761
+- train_type: RB
+  line: RB68
+  rides_ffm_da: 1782
+  rides_da_ffm: 1705
+- train_type: RE
+  line: RE60
+  rides_ffm_da: 1512
+  rides_da_ffm: 1510
+- train_type: ICE
+  line: ICE
+  rides_ffm_da: 879
+  rides_da_ffm: 947
+- train_type: RB
+  line: RB67
+  rides_ffm_da: 0
+  rides_da_ffm: 124
+- train_type: '?'
+  line: S6
+  rides_ffm_da: 49
+  rides_da_ffm: 45
+- train_type: '?'
+  line: RB68
+  rides_ffm_da: 41
+  rides_da_ffm: 28
+- train_type: VIA
+  line: RB61
+  rides_ffm_da: 0
+  rides_da_ffm: 65
+- train_type: '?'
+  line: RE60
+  rides_ffm_da: 15
+  rides_da_ffm: 9
+- train_type: VIA
+  line: RB82
+  rides_ffm_da: 13
+  rides_da_ffm: 0
+- train_type: '?'
+  line: '?'
+  rides_ffm_da: 11
+  rides_da_ffm: 1
+- train_type: IC
+  line: IC
+  rides_ffm_da: 0
+  rides_da_ffm: 2
+- train_type: '?'
+  line: RB82
+  rides_ffm_da: 1
+  rides_da_ffm: 0
+- train_type: Bus
+  line: RB67
+  rides_ffm_da: 0
+  rides_da_ffm: 1
+- train_type: DZ
+  line: DZ
+  rides_ffm_da: 0
+  rides_da_ffm: 1

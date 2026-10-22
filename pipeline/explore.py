@@ -31,6 +31,10 @@ HANDOFF_COLUMNS = [
 ]
 
 
+def pct(v: float | None) -> str:
+    return "–" if v is None else f"{v:.1%}"
+
+
 def md_table(rows: list[tuple], headers: list[str]) -> str:
     lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
     for r in rows:
@@ -73,7 +77,13 @@ def main() -> None:
         "",
     ]
 
-    con.execute(f"CREATE VIEW stops AS SELECT * FROM read_parquet({[str(f) for f in files]}, union_by_name=true)")
+    # train_line_ride_id repeats every day the same timetable pattern runs. A single run is
+    # identified by `id` minus its trailing stop number: <ride_id>-<YYMMDDHHMM first dep>-<stop_num>.
+    con.execute(f"""
+        CREATE VIEW stops AS
+        SELECT *, regexp_replace(id, '-[0-9]+$', '') AS ride_key
+        FROM read_parquet({[str(f) for f in files]}, union_by_name=true)
+    """)
     total, tmin, tmax = con.execute(
         "SELECT count(*), min(coalesce(arrival_planned_time, departure_planned_time)),"
         " max(coalesce(arrival_planned_time, departure_planned_time)) FROM stops"
@@ -92,6 +102,8 @@ def main() -> None:
     """).fetchone()
     report += [
         "### delay_in_min 정의 확인",
+        "- 결론: 출발 시각이 있으면 출발 기준, 없으면(종착) 도착 기준. 도착 기준 지연은 "
+        "`arrival_change_time − arrival_planned_time`으로 직접 계산해야 함.",
         f"- `delay_in_min == time − arrival_planned_time` 일치율: {delay_def[0]:.1%}",
         f"- `delay_in_min == time − departure_planned_time` 일치율: {delay_def[1]:.1%}",
         f"- `delay_in_min` null 비율: {delay_def[2]:.1%}",
@@ -124,24 +136,27 @@ def main() -> None:
     # ── 3. Corridor runs ──────────────────────────────────────────────────
     ffm = resolved.get("frankfurt_hbf", {}).get("eva", [])
     da = resolved.get("darmstadt_hbf", {}).get("eva", [])
-    report += ["## 3. 코리도어 운행 (같은 train_line_ride_id로 Frankfurt Hbf + Darmstadt Hbf 모두 경유)", ""]
+    report += ["## 3. 코리도어 운행 (같은 운행(ride_key)이 Frankfurt Hbf + Darmstadt Hbf 모두 경유)", ""]
     corridor_rows = []
     if ffm and da:
         con.execute("""
             CREATE TEMP TABLE corridor AS
-            WITH f AS (SELECT train_line_ride_id, min(train_line_station_num) AS f_num
+            WITH f AS (SELECT ride_key, min(train_line_station_num) AS f_num
                        FROM stops WHERE eva IN (SELECT unnest(?)) GROUP BY 1),
-                 d AS (SELECT train_line_ride_id, min(train_line_station_num) AS d_num
+                 d AS (SELECT ride_key, min(train_line_station_num) AS d_num
                        FROM stops WHERE eva IN (SELECT unnest(?)) GROUP BY 1)
-            SELECT f.train_line_ride_id,
+            SELECT f.ride_key,
                    CASE WHEN f_num < d_num THEN 'FFM→DA' ELSE 'DA→FFM' END AS direction
-            FROM f JOIN d USING (train_line_ride_id)
+            FROM f JOIN d USING (ride_key)
         """, [ffm, da])
+        n_days = con.execute(
+            "SELECT count(DISTINCT CAST(coalesce(departure_planned_time, arrival_planned_time) AS DATE)) FROM stops"
+        ).fetchone()[0]
         corridor_rows = con.execute("""
             WITH r AS (
-              SELECT DISTINCT c.train_line_ride_id, c.direction, s.train_type,
-                     coalesce(s.line_number, s.train_type) AS line
-              FROM corridor c JOIN stops s USING (train_line_ride_id)
+              SELECT DISTINCT c.ride_key, c.direction, coalesce(s.train_type, '?') AS train_type,
+                     coalesce(s.line_number, s.train_type, '?') AS line
+              FROM corridor c JOIN stops s USING (ride_key)
               WHERE s.eva IN (SELECT unnest(?))
             )
             SELECT train_type, line,
@@ -150,18 +165,36 @@ def main() -> None:
                    count(*) AS total
             FROM r GROUP BY ALL ORDER BY total DESC
         """, [ffm]).fetchall()
-        report.append(md_table(corridor_rows, ["train_type", "line_number (장거리는 train_type)",
-                                               "FFM→DA", "DA→FFM", "운행 수"]))
-        n_days = con.execute("SELECT count(DISTINCT CAST(coalesce(arrival_planned_time, departure_planned_time) AS DATE)) FROM stops").fetchone()[0]
-        report += ["", f"- 기간 내 날짜 수: {n_days} → 하루 평균 운행은 위 운행 수 ÷ {n_days}", ""]
+        report.append(md_table(
+            [(t, l, a, b, n, f"{n / n_days:.1f}") for t, l, a, b, n in corridor_rows],
+            ["train_type", "line_number (장거리는 train_type)", "FFM→DA", "DA→FFM", "운행 수", "일평균"]))
+        report += ["", f"- 기간 내 날짜 수: {n_days}", ""]
 
         # Which corridor stations do corridor runs actually serve?
         served = con.execute("""
-            SELECT s.station_name, s.eva, count(DISTINCT s.train_line_ride_id) AS rides
-            FROM corridor c JOIN stops s USING (train_line_ride_id)
+            SELECT s.station_name, s.eva, count(DISTINCT s.ride_key) AS rides
+            FROM corridor c JOIN stops s USING (ride_key)
             WHERE s.eva IN (SELECT unnest(?))
             GROUP BY ALL ORDER BY rides DESC
         """, [[e for v in resolved.values() for e in v["eva"]]]).fetchall()
+        # Line × station: average corridor runs per day stopping there (planned stops only).
+        order = [e["key"] for e in search["corridor"] if e["key"] in resolved]
+        top_lines = [l for t, l, *_ in corridor_rows if t != "?"][:5]
+        matrix = con.execute("""
+            SELECT s.eva, coalesce(s.line_number, s.train_type) AS line, count(DISTINCT s.ride_key) AS rides
+            FROM corridor c JOIN stops s USING (ride_key)
+            WHERE s.has_plan_record AND NOT coalesce(s.is_additional_stop, false)
+            GROUP BY ALL
+        """).fetchall()
+        cell = {(e, l): n for e, l, n in matrix}
+        mrows = []
+        for key in order:
+            for eva in resolved[key]["eva"]:
+                mrows.append((f"{resolved[key]['name']} ({eva})",
+                              *[f"{cell.get((eva, l), 0) / n_days:.1f}" for l in top_lines]))
+        report += ["### 노선 × 역 정차 (일평균 코리도어 운행, 계획 정차만)", "",
+                   md_table(mrows, ["역"] + top_lines), ""]
+
         report += ["### 코리도어 운행이 정차하는 후보 역", "",
                    md_table(served, ["station_name", "eva", "코리도어 운행 수"]), ""]
     else:
@@ -180,7 +213,7 @@ def main() -> None:
             GROUP BY ROLLUP (eva) ORDER BY eva NULLS LAST
         """, [ffm]).fetchall()
         report.append(md_table(
-            [(e or "전체", f"{n:,}", f"{p6:.1%}", f"{p15:.1%}", f"{p30:.1%}", f"{c:.1%}") for e, n, p6, p15, p30, c in san],
+            [(e or "전체", f"{n:,}", pct(p6), pct(p15), pct(p30), pct(c)) for e, n, p6, p15, p30, c in san],
             ["eva", "n", "≥6분", "≥15분", "≥30분", "취소율"]))
         p6_all = san[-1][2]
         verdict = "✅ 상식 범위(20~45%)" if 0.20 <= p6_all <= 0.45 else "⚠️ 상식 범위(20~45%) 밖 — 원인 확인 필요"
@@ -193,7 +226,7 @@ def main() -> None:
             GROUP BY 1 ORDER BY n DESC LIMIT 15
         """, [ffm]).fetchall()
         report += ["### train_type별 (취소 제외)", "",
-                   md_table([(t, f"{n:,}", f"{p:.1%}") for t, n, p in by_type], ["train_type", "n", "≥6분"]), ""]
+                   md_table([(t, f"{n:,}", pct(p)) for t, n, p in by_type], ["train_type", "n", "≥6분"]), ""]
 
     # ── Write outputs ─────────────────────────────────────────────────────
     stations = {
