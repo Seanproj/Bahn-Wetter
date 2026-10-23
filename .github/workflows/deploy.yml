@@ -55,7 +55,11 @@ jobs:
       - name: Run tests
         run: uv run pytest -q tests
 
+      # The share card is a bonus: a stalled apt mirror must not block the site deploy.
       - name: Install card fonts and browser
+        id: card-deps
+        continue-on-error: true
+        timeout-minutes: 6
         run: |
           # Korean text and color emoji for the share card. Skip man-db index rebuilds, which can stall
           # apt for many minutes on GitHub runners.
@@ -67,6 +71,9 @@ jobs:
           uv run --group cards playwright install --with-deps chromium
 
       - name: Render today's share card
+        if: steps.card-deps.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 3
         run: |
           day=$(TZ=Europe/Berlin date +%F)
           uv run --group cards python cards/make_card.py --date "$day" --out "site/dist/cards/$day.png"

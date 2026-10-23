@@ -118,6 +118,7 @@ uv run --group cards python cards/make_card.py [--date YYYY-MM-DD]   # 1080×135
   forecast stops beating the line-average baseline) → build_stats → export → commit JSON to main → deploy.
 - `deploy.yml` — on push to main, daily 03:47 UTC, manual, or called by the refresh: build site, render
   today's card to `site/dist/cards/{YYYY-MM-DD,latest}.png`, deploy to GitHub Pages. PRs build + render only.
+  Card steps are best-effort (time-capped, continue-on-error) so a stalled apt never blocks the site deploy.
 - Backtest folds roll with the data (holdout = latest 4 months, tune = 4 before).
 - `live.yml` — every 15 min 03–21 UTC: live.py → force-push `live.json` to orphan branch `live-data`.
   Skips (green) until repo secrets DB_CLIENT_ID / DB_API_KEY exist.
