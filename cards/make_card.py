@@ -66,7 +66,7 @@ def main() -> None:
             raise SystemExit(f"page errors: {errors}")
     finally:
         server.shutdown()
-    print(f"wrote {out.relative_to(ROOT)}")
+    print(f"wrote {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
 
 
 if __name__ == "__main__":
