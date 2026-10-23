@@ -115,22 +115,25 @@ def main() -> None:
     report += ["## 2. 역 검색 → EVA 확정", ""]
     resolved: dict[str, dict] = {}
     rows = []
-    for entry in search["corridor"]:
-        hits = con.execute("""
-            SELECT station_name, eva, count(*) AS n
-            FROM stops WHERE station_name ILIKE ?
-            GROUP BY ALL ORDER BY n DESC
-        """, [entry["pattern"]]).fetchall()
-        for name, eva, n in hits:
-            rows.append((entry["key"], entry["pattern"], name, eva, f"{n:,}"))
-        if not hits:
-            rows.append((entry["key"], entry["pattern"], "❌ 없음", None, 0))
-            continue
-        resolved[entry["key"]] = {
-            "name": hits[0][0],
-            "eva": sorted({h[1] for h in hits if h[0] == hits[0][0]}),
-            "rows": int(sum(h[2] for h in hits if h[0] == hits[0][0])),
-        }
+    for entry in search["corridor"] + search.get("destinations", []):
+        names, evas, total = [], set(), 0
+        for pattern in entry.get("patterns") or [entry["pattern"]]:
+            hits = con.execute("""
+                SELECT station_name, eva, count(*) AS n
+                FROM stops WHERE station_name ILIKE ?
+                GROUP BY ALL ORDER BY n DESC
+            """, [pattern]).fetchall()
+            for name, eva, n in hits:
+                rows.append((entry["key"], pattern, name, eva, f"{n:,}"))
+            if not hits:
+                rows.append((entry["key"], pattern, "❌ 없음", None, 0))
+                continue
+            top = hits[0][0]  # each pattern resolves to its most frequent station name
+            names.append(top)
+            evas |= {h[1] for h in hits if h[0] == top}
+            total += sum(h[2] for h in hits if h[0] == top)
+        if names:
+            resolved[entry["key"]] = {"name": names[0], "eva": sorted(evas), "rows": int(total)}
     report += [md_table(rows, ["key", "pattern", "station_name", "eva", "rows"]), ""]
 
     # ── 3. Corridor runs ──────────────────────────────────────────────────
@@ -236,6 +239,7 @@ def main() -> None:
         "hub": "frankfurt_hbf",
         "corridor_order": [e["key"] for e in search["corridor"] if e["key"] in resolved],
         "stations": {k: {"name": v["name"], "eva": v["eva"]} for k, v in resolved.items()},
+        "routes": [r for r in search.get("routes", []) if r["to"] in resolved],
         "corridor_lines": [
             {"train_type": t, "line": l, "rides_ffm_da": a, "rides_da_ffm": b}
             for t, l, a, b, _ in corridor_rows

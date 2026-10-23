@@ -92,3 +92,10 @@ def test_fixture_cli_writes_json(tmp_path):
     assert live.main(["--fixtures", str(FIXTURES), "--now", "2026-09-09T20:36", "--out", str(out)]) == 0
     data = json.loads(out.read_text())
     assert data["source"] == "fixtures" and data["snapshot"] == "2026-09-09T20:36"
+
+
+def test_every_route_direction_is_reported(snap):
+    import yaml
+    cfg = yaml.safe_load((ROOT / "config" / "stations.yaml").read_text())
+    keys = {k for r in cfg["routes"] for k in (f"ffm_{r['code']}", f"{r['code']}_ffm")}
+    assert set(snap["corridor"]) == keys  # routes without fixtures are present, just empty

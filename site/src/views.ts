@@ -40,7 +40,6 @@ export function homeSky(): string {
   return "fortune";
 }
 
-const short = (s: string) => s.replace(" (Main)", "").replace(" Hbf", "");
 
 /** The fortune grade as a coloured word; colour follows the level name. */
 export function gradeTag(f: Forecast | null | undefined, data: Data, cls = "grade"): string {
@@ -48,10 +47,47 @@ export function gradeTag(f: Forecast | null | undefined, data: Data, cls = "grad
   return `<span class="${cls} g-${w.name}">${esc(w.fortune ?? w.label)}</span>`;
 }
 
-function directionToggle(ctx: Ctx, cls = "toggle"): string {
-  const b = (d: Direction, label: string) =>
-    `<button data-direction="${d}" class="${ctx.direction === d ? "on" : ""}" aria-pressed="${ctx.direction === d}">${label}</button>`;
-  return `<div class="${cls}" role="group" aria-label="방향">${b("ffm_da", "Frankfurt → Darmstadt")}${b("da_ffm", "Darmstadt → Frankfurt")}</div>`;
+// ── Routes ──────────────────────────────────────────────────────────────
+
+export const routeOf = (data: Data, dir: Direction) =>
+  data.corridor.routes.find((r) => r.out === dir || r.in === dir) ?? data.corridor.routes[0];
+
+export const linesOf = (data: Data, dir: Direction): string[] => data.corridor.directions[dir]?.lines ?? [];
+
+/** Short destination label: the route label outbound ("공항"), "Frankfurt" inbound. */
+export function toLabel(data: Data, dir: Direction): string {
+  const r = routeOf(data, dir);
+  return dir === r.out ? r.label : "Frankfurt";
+}
+
+/** "Frankfurt → 공항" / "공항 → Frankfurt". */
+export function dirText(data: Data, dir: Direction): string {
+  const r = routeOf(data, dir);
+  return dir === r.out ? `Frankfurt → ${r.label}` : `${r.label} → Frankfurt`;
+}
+
+/** One forecast for a whole direction on a day type: all its lines, weighted by number of trains. */
+export function directionOverall(data: Data, dir: Direction, dayType: DayType): Forecast | null {
+  const cells = data.corridor.cells[dir]?.[dayType] ?? {};
+  const fs = linesOf(data, dir).map((l) => cells[l]?.overall).filter((f): f is Forecast => !!f && f.p6 !== null);
+  const n = fs.reduce((a, f) => a + f.n, 0);
+  if (!n) return null;
+  const avg = (k: "p6" | "p15" | "p30" | "pc") => fs.reduce((a, f) => a + (f[k] ?? 0) * f.n, 0) / n;
+  return { n, p6: avg("p6"), p15: avg("p15"), p30: avg("p30"), pc: avg("pc") };
+}
+
+/** Route chips (Darmstadt / 공항 / …) and a from/to toggle for the selected route. */
+function routePicker(data: Data, ctx: Ctx, dark = false): string {
+  const cur = routeOf(data, ctx.direction);
+  const chips = data.corridor.routes
+    .map((r) => `<button class="chip${r.code === cur.code ? " on" : ""}" data-route="${esc(r.code)}" aria-pressed="${r.code === cur.code}">${esc(r.label)}</button>`)
+    .join("");
+  const b = (d: Direction) =>
+    `<button data-direction="${esc(d)}" class="${ctx.direction === d ? "on" : ""}" aria-pressed="${ctx.direction === d}">${esc(dirText(data, d))}</button>`;
+  return `<div class="route-picker${dark ? " dark" : ""}">
+    <div class="chips routes" role="group" aria-label="노선">${chips}</div>
+    <div class="toggle${dark ? " dark" : ""}" role="group" aria-label="방향">${b(cur.out)}${b(cur.in)}</div>
+  </div>`;
 }
 
 /** Lucky / careful hour at Frankfurt Hbf for the selected day type (06–23). */
@@ -67,7 +103,6 @@ export function renderHome(data: Data, ctx: Ctx): string {
   const { meta, hub, corridor } = data;
   const day = hub.daytypes[ctx.dayType];
   const isToday = ctx.dayType === ctx.today;
-  const dir = corridor.directions[ctx.direction];
   const window = bestWindow(ctx);
   const best = bestTrain(data, ctx.direction, ctx.dayType, window.hours);
   const { lucky, careful } = luckyHours(data, ctx);
@@ -78,7 +113,7 @@ export function renderHome(data: Data, ctx: Ctx): string {
   const slip = best
     ? (() => {
         const w = weatherOf(best.f, meta);
-        const others = corridor.lines
+        const others = linesOf(data, ctx.direction)
           .filter((l) => l !== best.line)
           .map((l) => ({ l, f: corridor.cells[ctx.direction][ctx.dayType][l]?.hours[String(best.hour)] }))
           .filter((o): o is { l: string; f: Forecast } => !!o.f && o.f.p6 !== null)
@@ -129,8 +164,8 @@ export function renderHome(data: Data, ctx: Ctx): string {
   <section class="fortune">
     <p class="f-kicker">BAHN-WETTER</p>
     <h1>🔮 ${title}</h1>
-    <p class="f-sub">${isToday ? formatDate(ctx.now, meta) : `${DAYTYPE_LABEL[ctx.dayType]}`} · ${esc(short(dir.from))} → ${esc(short(dir.to))}</p>
-    ${directionToggle(ctx, "toggle dark")}
+    <p class="f-sub">${isToday ? formatDate(ctx.now, meta) : `${DAYTYPE_LABEL[ctx.dayType]}`} · ${esc(dirText(data, ctx.direction))}</p>
+    ${routePicker(data, ctx, true)}
     ${slip}
   </section>
 
@@ -159,7 +194,7 @@ export function renderHome(data: Data, ctx: Ctx): string {
   </details>`;
 }
 
-// ── Commute: Frankfurt ↔ Darmstadt ──────────────────────────────────────
+// ── Commute: Frankfurt ↔ route endpoints ────────────────────────────────
 
 /** Chance the trip goes badly: canceled, or runs and arrives ≥6 min late. */
 const badTrip = (f: Forecast) => (f.pc ?? 0) + (1 - (f.pc ?? 0)) * f.p6!;
@@ -176,7 +211,7 @@ const pickScore = (f: Forecast) => {
 export function bestTrain(data: Data, direction: Direction, dayType: DayType, hours: number[]) {
   const cells = data.corridor.cells[direction][dayType];
   let best: { line: string; hour: number; f: Forecast } | null = null;
-  for (const line of data.corridor.lines) {
+  for (const line of linesOf(data, direction)) {
     for (const h of hours) {
       const f = cells[line]?.hours[String(h)];
       if (!f || f.p6 === null) continue;
@@ -198,28 +233,27 @@ function bestWindow(ctx: Ctx): { label: string; hours: number[] } {
 }
 
 export function commuteSky(data: Data, ctx: Ctx): string {
-  const cells = data.corridor.cells[ctx.direction][ctx.dayType];
-  const main = data.corridor.lines.map((l) => cells[l]?.overall).filter((f): f is Forecast => !!f && f.p6 !== null);
-  const n = main.reduce((a, f) => a + f.n, 0);
-  const p6 = n ? main.reduce((a, f) => a + f.p6! * f.n, 0) / n : null;
-  return weatherOf({ n, p6, p15: null, p30: null, pc: null }, data.meta).name;
+  const f = directionOverall(data, ctx.direction, ctx.dayType);
+  return weatherOf(f && { ...f, pc: null }, data.meta).name; // sky follows delays; cancellations show per cell
 }
 
 export function renderCommute(data: Data, ctx: Ctx): string {
   const { corridor } = data;
-  const dir = corridor.directions[ctx.direction];
+  const lines = linesOf(data, ctx.direction);
+  const to = toLabel(data, ctx.direction);
+  const from = dirText(data, ctx.direction).split(" → ")[0];
   const cells = corridor.cells[ctx.direction][ctx.dayType];
   const isToday = ctx.dayType === ctx.today;
 
   const window = bestWindow(ctx);
   const best = bestTrain(data, ctx.direction, ctx.dayType, window.hours);
 
-  const hours = [...new Set(corridor.lines.flatMap((l) => Object.keys(cells[l]?.hours ?? {}).map(Number)))].sort((a, b) => a - b);
-  const head = corridor.lines.map((l) => `<th scope="col"><span class="badge">${esc(l)}</span></th>`).join("");
+  const hours = [...new Set(lines.flatMap((l) => Object.keys(cells[l]?.hours ?? {}).map(Number)))].sort((a, b) => a - b);
+  const head = lines.map((l) => `<th scope="col"><span class="badge">${esc(l)}</span></th>`).join("");
   const rows = hours
     .map((h) => {
       const current = isToday && h === ctx.now.hour;
-      const tds = corridor.lines
+      const tds = lines
         .map((l) => {
           const f = cells[l]?.hours[String(h)];
           if (!f) return `<td class="empty" aria-label="운행 없음"></td>`;
@@ -236,10 +270,7 @@ export function renderCommute(data: Data, ctx: Ctx): string {
   <section class="hero compact">
     <p class="date">${isToday ? formatDate(ctx.now, data.meta) : `${DAYTYPE_LABEL[ctx.dayType]} 예보`}</p>
     <h1>출퇴근 예보</h1>
-    <div class="toggle" role="group" aria-label="방향">
-      <button data-direction="ffm_da" class="${ctx.direction === "ffm_da" ? "on" : ""}" aria-pressed="${ctx.direction === "ffm_da"}">Frankfurt → Darmstadt</button>
-      <button data-direction="da_ffm" class="${ctx.direction === "da_ffm" ? "on" : ""}" aria-pressed="${ctx.direction === "da_ffm"}">Darmstadt → Frankfurt</button>
-    </div>
+    ${routePicker(data, ctx)}
   </section>
 
   ${dayChips(ctx)}
@@ -249,15 +280,15 @@ export function renderCommute(data: Data, ctx: Ctx): string {
     ${best ? `<p class="best-line" ${detailAttrs(`${best.line} · ${best.hour}시 출발`, best.f, { line: best.line, direction: ctx.direction })} tabindex="0">
         ${icon(best.f, data, "md")}
         <span><strong>${best.hour}시대 ${esc(best.line)}</strong><br>
-        <small>${esc(dir.to)} 도착 지연 ${pct(best.f.p6)} · 취소 ${pct(best.f.pc, 1)} · ${sampleNote(best.f)}</small></span>
+        <small>${esc(to)} 도착 지연 ${pct(best.f.p6)} · 취소 ${pct(best.f.pc, 1)} · ${sampleNote(best.f)}</small></span>
       </p>` : `<p>이 시간대에는 예보할 데이터가 부족해요.</p>`}
   </section>
 
   ${isToday ? liveCorridor(data, ctx) : ""}
 
   <section class="card">
-    <h2>시간대 × 노선 <small>${esc(dir.from)} 출발 시각 기준</small></h2>
-    <p class="note">${esc(dir.to)} <b>도착</b>이 6분 이상 늦을 확률. 칸을 누르면 자세히 볼 수 있어요.</p>
+    <h2>시간대 × 노선 <small>${esc(from)} 출발 시각 기준</small></h2>
+    <p class="note">${esc(to)} <b>도착</b>이 6분 이상 늦을 확률. 칸을 누르면 자세히 볼 수 있어요.</p>
     <div class="grid-wrap">
       <table class="grid">
         <thead><tr><th scope="col"><span class="sr">출발</span></th>${head}</tr></thead>
@@ -293,9 +324,8 @@ function liveStatus(t: LiveTrain): string {
 function liveCorridor(data: Data, ctx: Ctx): string {
   const live = data.live;
   if (!live) return "";
-  const trains = live.corridor[ctx.direction].filter((t) => !t.departed || t.canceled).slice(0, 6);
+  const trains = (live.corridor[ctx.direction] ?? []).filter((t) => !t.departed || t.canceled).slice(0, 6);
   if (!trains.length) return "";
-  const dir = data.corridor.directions[ctx.direction];
   const rows = trains
     .map((t) => {
       const f: Forecast = { n: t.n ?? 0, p6: t.p6, p15: t.p15, p30: null, pc: t.canceled ? 1 : 0 };
@@ -308,7 +338,7 @@ function liveCorridor(data: Data, ctx: Ctx): string {
     })
     .join("");
   return `<section class="card live">
-    <h2><span class="live-dot" aria-hidden="true"></span>곧 출발 <small>실시간 ${live.snapshot.slice(11)} · ${esc(dir.to)} 도착 6분↑ 확률</small></h2>
+    <h2><span class="live-dot" aria-hidden="true"></span>곧 출발 <small>실시간 ${live.snapshot.slice(11)} · ${esc(toLabel(data, ctx.direction))} 도착 6분↑ 확률</small></h2>
     <ol class="live-list">${rows}</ol>
     <p class="note">지금 지연을 반영한 확률이에요. 출발이 늦을수록 도착 지연 확률이 크게 올라가요.</p>
   </section>`;
@@ -322,7 +352,7 @@ export function conditionalTable(data: Data, trip: { line: string; direction: Di
   const rows = cells
     .map((cell, i) => (cell ? `<tr><th scope="row">${c.bins[i]}</th><td>${icon({ n: cell.n, p6: cell.p6, p15: cell.p15, p30: null, pc: null }, data)} ${pct(cell.p6)}</td><td>${pct(cell.p15)}</td></tr>` : ""))
     .join("");
-  return `<div class="cond"><p class="cond-title">출발이 늦으면? <small>${esc(data.corridor.directions[trip.direction].to)} 도착 지연 확률</small></p>
+  return `<div class="cond"><p class="cond-title">출발이 늦으면? <small>${esc(toLabel(data, trip.direction))} 도착 지연 확률</small></p>
     <table><thead><tr><th scope="col">출발 지연</th><th scope="col">6분↑</th><th scope="col">15분↑</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -342,7 +372,7 @@ export function renderAbout(data: Data): string {
   <section class="hero compact"><h1>Bahn-Wetter 소개</h1></section>
   <section class="card prose">
     <h2>이게 뭔가요?</h2>
-    <p>Frankfurt (Main) Hbf와 Frankfurt ↔ Darmstadt 출퇴근 구간의 열차 지연 확률을 운세·캐릭터·뽑기로 보여주는 비공식 재미용 서비스예요.
+    <p>Frankfurt (Main) Hbf와 프랑크푸르트 근교 노선(${data.corridor.routes.map((r) => esc(r.label)).join(" · ")})의 열차 지연 확률을 운세·캐릭터·뽑기로 보여주는 비공식 재미용 서비스예요.
        재미있게 보여줄 뿐, 숫자는 모두 실제 운행 기록에서 계산해요.</p>
     <p><b>${esc(DISCLAIMER)}.</b></p>
 

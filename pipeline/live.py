@@ -1,13 +1,13 @@
 """Live snapshot from the DB Timetables API → live.json (HANDOFF §3.2, Phase 5).
 
-For Frankfurt Hbf (both EVAs) and Darmstadt Hbf it fetches the hourly plans around now plus the
-full change feed (fchg), and writes:
+For Frankfurt Hbf (both EVAs) and every route endpoint in config/stations.yaml → routes (Darmstadt Hbf,
+the airport, …) it fetches the hourly plans around now plus the full change feed (fchg), and writes:
 - hub:      how many Frankfurt Hbf trains within ±30 min are ≥6 min late / canceled right now ("실황")
-- corridor: upcoming Frankfurt ↔ Darmstadt departures with their current delay and the probability of
+- corridor: upcoming departures per route direction with their current delay and the probability of
             arriving ≥6 min late given that delay (conditional table from corridor.json)
 
-Corridor runs are found the same way as in the historical data: the same run (stop id without its
-trailing stop number) appears at both Frankfurt Hbf and Darmstadt Hbf; direction from stop order.
+Route runs are found the same way as in the historical data: the same run (stop id without its
+trailing stop number) appears at Frankfurt Hbf and at the route endpoint; direction from stop order.
 
 Credentials: DB_CLIENT_ID and DB_API_KEY (environment or .env). Without them the script exits 0 and
 writes nothing, so the scheduled workflow stays green until a key is added.
@@ -146,23 +146,25 @@ def conditional_lookup(conditional: dict, direction: str, line: str, delay: int)
     return cells[b] if cells else None
 
 
-def corridor_now(ffm: list[dict], da: list[dict], now: dt.datetime, conditional: dict) -> dict:
+def corridor_now(ffm: list[dict], dest_stops: list[dict], route: dict, now: dt.datetime, conditional: dict) -> dict:
+    """Upcoming runs of one route (Frankfurt Hbf ↔ route endpoint), keyed by direction."""
+    out_key, in_key = f"ffm_{route['code']}", f"{route['code']}_ffm"
     by_ride = {}
     for s in ffm:
         by_ride.setdefault(ride_key(s["id"]), {})["ffm"] = s
-    for s in da:
-        by_ride.setdefault(ride_key(s["id"]), {})["da"] = s
-    found: dict[str, list] = {"ffm_da": [], "da_ffm": []}
+    for s in dest_stops:
+        by_ride.setdefault(ride_key(s["id"]), {}).setdefault("to", s)  # first EVA wins if a run shows twice
+    found: dict[str, list] = {out_key: [], in_key: []}
     for pair in by_ride.values():
-        if "ffm" not in pair or "da" not in pair:
+        if "ffm" not in pair or "to" not in pair:
             continue
-        south = stop_num(pair["ffm"]["id"]) < stop_num(pair["da"]["id"])
-        origin, dest = (pair["ffm"], pair["da"]) if south else (pair["da"], pair["ffm"])
+        outbound = stop_num(pair["ffm"]["id"]) < stop_num(pair["to"]["id"])
+        origin, dest = (pair["ffm"], pair["to"]) if outbound else (pair["to"], pair["ffm"])
         if origin["dp_pt"] is None or dest["ar_pt"] is None or origin["train_type"] == "Bus":
             continue
         if not (now - CORRIDOR_PAST <= origin["dp_pt"] <= now + CORRIDOR_AHEAD):
             continue
-        direction = "ffm_da" if south else "da_ffm"
+        direction = out_key if outbound else in_key
         delay = origin["dp_delay"]
         canceled = origin["dp_canceled"] or dest["ar_canceled"]
         cell = None if canceled else conditional_lookup(conditional, direction, origin["line"], delay)
@@ -197,12 +199,17 @@ def load_dotenv(path: Path = ROOT / ".env") -> None:
 
 
 class ApiSource:
+    MIN_INTERVAL = 1.1  # seconds between requests: ~40 per run stays under the free plan's per-minute limit
+
     def __init__(self, client_id: str, api_key: str):
         self.headers = {"DB-Client-Id": client_id, "DB-Api-Key": api_key, "Accept": "application/xml"}
+        self.last = 0.0
 
     def get(self, path: str) -> str | None:
         """XML body, or None when the API has nothing for this path (404)."""
         for attempt in range(3):
+            time.sleep(max(0.0, self.last + self.MIN_INTERVAL - time.monotonic()))
+            self.last = time.monotonic()
             try:
                 req = urllib.request.Request(f"{API}/{path}", headers=self.headers)
                 with urllib.request.urlopen(req, timeout=20) as res:
@@ -246,14 +253,17 @@ def station_stops(source, eva: str, station: str, now: dt.datetime) -> list[dict
 def snapshot(source, now: dt.datetime, mode: str) -> dict:
     cfg = yaml.safe_load(STATIONS.read_text())
     conditional = json.loads(CORRIDOR_JSON.read_text())["conditional"]
-    ffm = [s for eva in cfg["stations"]["frankfurt_hbf"]["eva"] for s in station_stops(source, eva, "frankfurt_hbf", now)]
-    da = [s for eva in cfg["stations"]["darmstadt_hbf"]["eva"] for s in station_stops(source, eva, "darmstadt_hbf", now)]
+    stops = lambda key: [s for eva in cfg["stations"][key]["eva"] for s in station_stops(source, eva, key, now)]
+    ffm = stops(cfg["hub"])
+    corridor = {}
+    for route in cfg["routes"]:
+        corridor.update(corridor_now(ffm, stops(route["to"]), route, now, conditional))
     return {
         "generated_at": now.replace(tzinfo=BERLIN).isoformat(timespec="seconds"),
         "snapshot": now.strftime("%Y-%m-%dT%H:%M"),
         "source": mode,
         "hub": hub_now(ffm, now),
-        "corridor": corridor_now(ffm, da, now, conditional),
+        "corridor": corridor,
     }
 
 
@@ -281,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     c = data["corridor"]
     print(f"wrote {args.out} · hub n={data['hub']['n']} p6={data['hub']['p6']} · "
-          f"ffm_da {len(c['ffm_da'])} · da_ffm {len(c['da_ffm'])} trains")
+          + " · ".join(f"{k} {len(v)}" for k, v in c.items()) + " trains")
     return 0
 
 

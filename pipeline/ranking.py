@@ -52,7 +52,8 @@ def _trains(events: pd.DataFrame, extra_keys: list[str], min_runs: int) -> pd.Da
 
 def _best(trains: pd.DataFrame) -> pd.DataFrame:
     ok = trains[(trains["runs"] >= MIN_RUNS_BEST) & (trains["cancels"] == 0)]
-    return ok.sort_values(["p6", "mean_delay", "runs"], ascending=[True, True, False]).head(TOP)
+    ok = ok.sort_values(["p6", "mean_delay", "runs"], ascending=[True, True, False])
+    return ok.drop_duplicates(["line", "train_number"]).head(TOP)  # one entry per train across routes
 
 
 def _records(df: pd.DataFrame, cols: list[str]) -> list[dict]:
@@ -108,7 +109,9 @@ def weekly_ranking(stops: pd.DataFrame, trips: pd.DataFrame, hub: str, names: di
     tw = trips[trips["date"] >= start].copy()
     ctrains = _trains(tw, ["direction"], MIN_TRAIN_RUNS_CORRIDOR)
     ccols = ["direction", "line", "train_number", "time"]
-    cworst = ctrains.sort_values(["p6", "mean_delay"], ascending=[False, False]).head(TOP)
+    # A run serving several routes (S8: airport, Mainz, Wiesbaden) should appear only once per list.
+    once = lambda df: df.drop_duplicates(["line", "train_number"])
+    cworst = once(ctrains.sort_values(["p6", "mean_delay"], ascending=[False, False])).head(TOP)
     cbest = _best(ctrains)
 
     return {
