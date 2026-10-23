@@ -92,31 +92,44 @@ def load_stops() -> pd.DataFrame:
     return df
 
 
+def direction_keys(route: dict) -> tuple[str, str]:
+    """(outbound, inbound) direction keys of a route, e.g. ("ffm_da", "da_ffm")."""
+    return f"ffm_{route['code']}", f"{route['code']}_ffm"
+
+
 def load_trips(stops: pd.DataFrame) -> pd.DataFrame:
-    """One row per corridor run (same ride_key at Frankfurt Hbf and Darmstadt Hbf).
+    """One row per route run: the same ride_key at Frankfurt Hbf and at a route's endpoint
+    (config/stations.yaml → routes), e.g. Frankfurt Hbf ↔ Darmstadt Hbf.
 
     Forecast target for the commuter grid: delay/cancellation on arrival at the destination,
-    keyed by the planned departure hour at the origin.
+    keyed by the planned departure hour at the origin. `direction` is ffm_<code> or <code>_ffm.
     """
-    ffm = stops[stops["station"] == "frankfurt_hbf"]
-    da = stops[stops["station"] == "darmstadt_hbf"]
+    cfg = load_stations()
     cols = ["ride_key", "stop_num", "dep_planned", "dep_delay", "dep_canceled", "planned", "delay", "canceled", "line", "train_type", "train_number"]
-    m = ffm[cols].merge(da[cols], on="ride_key", suffixes=("_ffm", "_da"))
-    south = m["stop_num_ffm"] < m["stop_num_da"]
-    o = lambda c: m[f"{c}_ffm"].where(south, m[f"{c}_da"])  # origin side
-    d = lambda c: m[f"{c}_da"].where(south, m[f"{c}_ffm"])  # destination side
-    trips = pd.DataFrame({
-        "ride_key": m["ride_key"],
-        "direction": south.map({True: "ffm_da", False: "da_ffm"}),
-        "line": m["line_ffm"],
-        "train_type": m["train_type_ffm"],
-        "train_number": m["train_number_ffm"],
-        "planned": pd.to_datetime(o("dep_planned")),
-        "arr_planned": pd.to_datetime(d("planned")),
-        "dep_delay": o("dep_delay"),  # departure delay at the origin (the live "delayed now" signal)
-        "delay": d("delay"),
-        "canceled": (o("dep_canceled").fillna(False) | d("canceled").fillna(False)).astype(bool),
-    })
+    # A run stops at only one of a station's EVAs; keep its first stop there if data says otherwise.
+    first = lambda df: df.sort_values("stop_num").drop_duplicates("ride_key")
+    ffm = first(stops[stops["station"] == cfg["hub"]])[cols]
+    parts = []
+    for route in cfg["routes"]:
+        out_key, in_key = direction_keys(route)
+        m = ffm.merge(first(stops[stops["station"] == route["to"]])[cols], on="ride_key", suffixes=("_ffm", "_to"))
+        outbound = m["stop_num_ffm"] < m["stop_num_to"]
+        o = lambda c: m[f"{c}_ffm"].where(outbound, m[f"{c}_to"])  # origin side
+        d = lambda c: m[f"{c}_to"].where(outbound, m[f"{c}_ffm"])  # destination side
+        parts.append(pd.DataFrame({
+            "ride_key": m["ride_key"],
+            "route": route["code"],
+            "direction": outbound.map({True: out_key, False: in_key}),
+            "line": m["line_ffm"],
+            "train_type": m["train_type_ffm"],
+            "train_number": m["train_number_ffm"],
+            "planned": pd.to_datetime(o("dep_planned")),
+            "arr_planned": pd.to_datetime(d("planned")),
+            "dep_delay": o("dep_delay"),  # departure delay at the origin (the live "delayed now" signal)
+            "delay": d("delay"),
+            "canceled": (o("dep_canceled").fillna(False) | d("canceled").fillna(False)).astype(bool),
+        }))
+    trips = pd.concat(parts, ignore_index=True)
     trips = trips.dropna(subset=["planned", "line"])
     trips["date"] = trips["planned"].dt.normalize()
     trips["hour"] = trips["planned"].dt.hour

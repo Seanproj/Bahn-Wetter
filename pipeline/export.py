@@ -2,7 +2,7 @@
 
 - meta.json      data range, weather thresholds/copy, Hessen holidays, attribution
 - hub.json       Frankfurt Hbf: overall, per day type and hour (all lines combined), per line
-- corridor.json  Frankfurt Hbf ↔ Darmstadt Hbf trips: direction × day type × line × departure hour,
+- corridor.json  route trips (Frankfurt Hbf ↔ Darmstadt, airport, …): direction × day type × line × departure hour,
                  plus `conditional`: arrival-delay probability by origin-departure-delay bin (conditional.py)
                  and `characters` / `dist`: per-line profiles for the playful views (profiles.py)
 - ranking.json   observed worst/best lines and trains in the last 7 days of data (ranking.py)
@@ -24,7 +24,7 @@ import holidays
 import pandas as pd
 import yaml
 
-from events import load_stations, load_stops, load_trips
+from events import direction_keys, load_stations, load_stops, load_trips
 from conditional import export_table
 from profiles import line_profiles
 from ranking import weekly_ranking
@@ -76,21 +76,24 @@ def export_hub(stops: pd.DataFrame, key: str) -> dict:
 
 
 def export_corridor(trips: pd.DataFrame, cfg: dict, n_days: int) -> dict:
-    # Keep lines that run on average at least once a day in either direction.
-    totals = trips[trips["level"] == 1].groupby("line")["n_all"].sum()
-    lines = totals[totals >= n_days].sort_values(ascending=False).index.tolist()
+    """Route trips: one entry per direction (ffm_<code> / <code>_ffm) with its own line list."""
     names = {k: v["name"] for k, v in cfg["stations"].items()}
-    out = {
-        "directions": {
-            "ffm_da": {"from": names["frankfurt_hbf"], "to": names["darmstadt_hbf"]},
-            "da_ffm": {"from": names["darmstadt_hbf"], "to": names["frankfurt_hbf"]},
-        },
-        "lines": lines,
-        "cells": {},
-    }
-    finest = trips[(trips["level"] == 3) & trips["line"].isin(lines)]
-    by_line = trips[(trips["level"] == 2) & trips["line"].isin(lines)]
-    for direction in out["directions"]:
+    hub = names[cfg["hub"]]
+    level1 = trips[trips["level"] == 1]
+    out = {"routes": [], "directions": {}, "cells": {}}
+    for route in cfg["routes"]:
+        out_key, in_key = direction_keys(route)
+        out["routes"].append({"code": route["code"], "label": route["label"], "name": names[route["to"]],
+                              "out": out_key, "in": in_key})
+        for key, frm, to in ((out_key, hub, names[route["to"]]), (in_key, names[route["to"]], hub)):
+            # Keep lines that run on average at least once a day in this direction.
+            totals = level1[level1["direction"] == key].set_index("line")["n_all"]
+            lines = totals[totals >= n_days].sort_values(ascending=False).index.tolist()
+            out["directions"][key] = {"route": route["code"], "from": frm, "to": to, "lines": lines}
+
+    finest = trips[trips["level"] == 3]
+    by_line = trips[trips["level"] == 2]
+    for direction, info in out["directions"].items():
         out["cells"][direction] = {}
         for d in DAYTYPES:
             f = finest[(finest["direction"] == direction) & (finest["daytype"] == d)]
@@ -100,7 +103,7 @@ def export_corridor(trips: pd.DataFrame, cfg: dict, n_days: int) -> dict:
                     "overall": forecast(bl[bl["line"] == line].iloc[0]) if (bl["line"] == line).any() else None,
                     "hours": {int(r["hour"]): forecast(r) for _, r in f[f["line"] == line].iterrows()},
                 }
-                for line in lines
+                for line in info["lines"]
             }
     return out
 
@@ -135,8 +138,9 @@ def main() -> None:
     trip_events = load_trips(events)
     corridor = export_corridor(trips, cfg, n_days)
     # Phase 5: arrival-delay probability given how late the train already is at its origin.
-    corridor["conditional"] = export_table(trip_events, corridor["lines"], MIN_N)
-    corridor.update(line_profiles(trip_events, corridor["lines"], MIN_N))  # characters + delay quantiles
+    lines_by_direction = {k: v["lines"] for k, v in corridor["directions"].items()}
+    corridor["conditional"] = export_table(trip_events, lines_by_direction, MIN_N)
+    corridor.update(line_profiles(trip_events, lines_by_direction, MIN_N))  # characters + delay quantiles
     files = {
         "meta.json": meta,
         "hub.json": export_hub(stops, cfg["hub"]),

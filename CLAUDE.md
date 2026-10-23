@@ -6,7 +6,8 @@ This file condenses the working rules. If they ever disagree, HANDOFF.md wins �
 ## What this is
 A static website that shows Deutsche Bahn delay probabilities in playful formats: a daily fortune
 (운세: 대길…대흉, 잠수) on the home page and share card, train character cards (랭킹) and a delay gacha
-with a "100번 타면" grid (출퇴근 detail sheet). Detail views still use the weather icons (☀️…⛈️🌪️). Scope: Frankfurt (Main) Hbf hub + Frankfurt ↔ Darmstadt Hbf commuter corridor.
+with a "100번 타면" grid (출퇴근 detail sheet). Detail views still use the weather icons (☀️…⛈️🌪️). Scope: Frankfurt (Main) Hbf hub + routes Frankfurt Hbf ↔ Darmstadt Hbf, Flughafen, Wiesbaden Hbf, Mainz Hbf,
+Hanau Hbf (config/station_search.yaml → routes; Darmstadt was the original HANDOFF corridor).
 Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later).
 
 ## Hard rules
@@ -39,6 +40,11 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - 2025-11/12 files have bare numeric line numbers ("6"); events.py prefixes the train type.
 - `train_type = "Bus"` rows are planned rail-replacement buses; excluded.
 - Trip (commuter) forecasts = arrival delay at the destination, keyed by origin departure hour.
+- Routes (Phase 6): a route run = same ride_key at Frankfurt Hbf and the route endpoint. Direction keys are
+  `ffm_<code>` / `<code>_ffm` (e.g. ffm_da, fra_ffm); each direction has its own line list (≥1 run/day).
+- The airport is one station key with two EVAs: 08070004 (Regionalbahnhof) + 08070003 (Fernbahnhof).
+- One S8 run can serve several routes (airport, Mainz, Wiesbaden): de-duplicate by ride_key / train for
+  per-line stats (profiles.py) and the weekly ranking.
 
 ## Site conventions
 - Today's day type is computed in the browser (Europe/Berlin time + Hessen holidays from meta.json),
@@ -48,6 +54,9 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - Playful views live in `site/src/fun.ts`: personas are derived from `corridor.json` → `characters`
   (pipeline/profiles.py) by fixed rules; the gacha picks a bucket from the tapped cell's own p6/p15/pc and a
   minute value from `dist` quantiles inside that bucket. No invented numbers.
+- Route picker = route chips + from/to toggle; switching route keeps the travel direction. The share card's
+  main slip uses the first route; its "오늘의 노선 운세" row shows every route's all-day average.
+- The dex shows the 12 busiest lines across all routes.
 - Themes per route via body[data-sky]: home/card = "fortune" (night + paper slip), ranking = "dex",
   commute/about keep the weather sky.
 - The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 plus a small-sample
@@ -72,8 +81,8 @@ pipeline/            Python 3.12+, managed by uv
   profiles.py        per-line observed profiles (characters + delay quantiles) for the playful views
   export.py          static JSON → site/public/data/{meta,hub,corridor,ranking}.json
 config/
-  station_search.yaml  search patterns for target stations (input)
-  stations.yaml        resolved stations + EVA (generated, then committed)
+  station_search.yaml  search patterns for target stations + route list (input)
+  stations.yaml        resolved stations + EVA + routes (generated, then committed)
   weather.yaml         probability → weather icon thresholds and copy
   model.yaml           hyper-parameters chosen by backtest.py (generated)
   live.yaml            URL of the published live.json (raw.githubusercontent.com, branch live-data) + max age

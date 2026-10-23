@@ -49,7 +49,16 @@ export interface Hub {
   }>;
 }
 
-export type Direction = "ffm_da" | "da_ffm";
+/** Route direction key: "ffm_<code>" (from Frankfurt Hbf) or "<code>_ffm" (to Frankfurt Hbf). */
+export type Direction = string;
+
+export interface Route {
+  code: string;
+  label: string; // short UI name, e.g. "공항"
+  name: string; // endpoint station name from the data
+  out: Direction;
+  in: Direction;
+}
 
 /** Arrival-delay probability given the delay at the origin (pipeline/conditional.py). */
 export interface Conditional {
@@ -59,8 +68,8 @@ export interface Conditional {
 }
 
 export interface Corridor {
-  directions: Record<Direction, { from: string; to: string }>;
-  lines: string[];
+  routes: Route[];
+  directions: Record<Direction, { route: string; from: string; to: string; lines: string[] }>;
   conditional: Conditional;
   /** Observed per-line profile, both directions (pipeline/profiles.py) — drives the character cards. */
   characters: Record<string, { n: number; p6: number; p15: number; p30: number; cancel: number; mean: number; p95: number; max: number; early: number }>;

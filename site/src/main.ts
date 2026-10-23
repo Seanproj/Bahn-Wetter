@@ -32,7 +32,7 @@ function save(key: string, value: string) {
 let data: Data;
 const now = berlinNow();
 let dayType: DayType | null = null; // null = today
-let direction: Direction = store<Direction>("direction", "ffm_da");
+let direction: Direction = store<Direction>("direction", "");
 let dexLine = store<string>("dexLine", "");
 
 /** "#/card?date=2026-10-23" → { route: "card", params } */
@@ -96,6 +96,15 @@ app.addEventListener("click", (e) => {
     dayType = d === dayTypeOf(now, data.meta) ? null : d;
     return render();
   }
+  const routeChip = t.closest<HTMLElement>("[data-route]");
+  if (routeChip) {
+    // Switch route, keep the travel direction (towards or away from Frankfurt).
+    const r = data.corridor.routes.find((x) => x.code === routeChip.dataset.route)!;
+    const inbound = data.corridor.routes.some((x) => x.in === direction);
+    direction = inbound ? r.in : r.out;
+    save("direction", direction);
+    return render();
+  }
   const dir = t.closest<HTMLElement>("[data-direction]");
   if (dir) {
     direction = dir.dataset.direction as Direction;
@@ -140,6 +149,7 @@ window.addEventListener("hashchange", () => {
 loadData()
   .then((d) => {
     data = d;
+    if (!d.corridor.directions[direction]) direction = d.corridor.routes[0].out; // first visit or a removed route
     footer.innerHTML = renderFooter(d);
     render();
     // Live data is optional: render first, then add it if a fresh snapshot exists (not on the card).

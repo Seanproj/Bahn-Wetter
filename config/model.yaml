@@ -1,15 +1,15 @@
 # Chosen by pipeline/backtest.py on the tuning folds — do not edit by hand.
-generated_at: '2026-10-22'
+generated_at: '2026-10-23'
 tasks:
   stop_delay6:
     half_life_days: 90
     prior_strength: 5
   stop_cancel:
-    half_life_days: 42
+    half_life_days: 90
     prior_strength: 200
   trip_delay6:
-    half_life_days: 90
-    prior_strength: 5
+    half_life_days: null
+    prior_strength: 20
   trip_cancel:
-    half_life_days: 42
-    prior_strength: 200
+    half_life_days: 90
+    prior_strength: 50

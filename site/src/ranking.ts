@@ -2,7 +2,7 @@
 
 import type { Data, RankedLine, RankedTrain } from "./data";
 import { renderDex } from "./fun";
-import { esc } from "./views";
+import { dirText, esc } from "./views";
 import { pct } from "./weather";
 
 const md = (iso: string) => {
@@ -13,9 +13,8 @@ const md = (iso: string) => {
 const delayText = (min: number) => (min < 0 ? `평균 ${Math.abs(min)}분 일찍` : `평균 +${min}분`);
 
 function trainRow(t: RankedTrain, data: Data, rank: number, worst: boolean): string {
-  const dir = t.direction ? data.corridor.directions[t.direction] : null;
-  const where = dir
-    ? `${esc(dir.from.replace(" (Main)", ""))} ${t.time} 발 → ${esc(dir.to.replace(" (Main)", ""))}`
+  const where = t.direction
+    ? `${t.time} 발 · ${esc(dirText(data, t.direction))}`
     : t.destination === data.ranking.station
       ? `${t.time} 도착 (종착)`
       : `${t.time} · ${esc(t.destination ?? "")}행`;
@@ -56,11 +55,11 @@ export function renderRanking(data: Data, dexLine: string): string {
   </section>
 
   <section class="card">
-    <h2>출퇴근 구간 최악의 열차 <small>Frankfurt ↔ Darmstadt 도착 기준</small></h2>
+    <h2>출퇴근 노선 최악의 열차 <small>5개 노선 · 도착 기준</small></h2>
     <ol class="ranks">${r.corridor.trains_worst.map((t, i) => trainRow(t, data, i, true)).join("")}</ol>
   </section>
   <section class="card">
-    <h2>출퇴근 구간 가장 성실한 열차 <small>취소 없이 5회 이상</small></h2>
+    <h2>출퇴근 노선 가장 성실한 열차 <small>취소 없이 5회 이상</small></h2>
     <ol class="ranks">${r.corridor.trains_best.map((t, i) => trainRow(t, data, i, false)).join("")}</ol>
   </section>
 

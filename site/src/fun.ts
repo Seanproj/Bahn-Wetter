@@ -15,9 +15,19 @@ interface Persona {
   color: string;
 }
 
-/** Persona from the line's own record, compared with the other corridor lines. First rule that fits wins. */
+const DEX_SIZE = 12;
+
+/** Lines in the dex: the busiest lines across all routes (by observed runs). */
+export function dexLines(data: Data): string[] {
+  return Object.entries(data.corridor.characters)
+    .sort((a, b) => b[1].n - a[1].n)
+    .slice(0, DEX_SIZE)
+    .map(([line]) => line);
+}
+
+/** Persona from the line's own record, compared with the other dex lines. First rule that fits wins. */
 export function persona(line: string, data: Data): Persona {
-  const all = Object.values(data.corridor.characters);
+  const all = dexLines(data).map((l) => data.corridor.characters[l]);
   const s = data.corridor.characters[line];
   const max = (k: keyof Profile) => Math.max(...all.map((x) => x[k]));
   const min = (k: keyof Profile) => Math.min(...all.map((x) => x[k]));
@@ -41,7 +51,7 @@ export function characterCard(line: string, data: Data): string {
   const p = persona(line, data);
   return `<article class="dex-card" style="--c:${p.color}">
     <div class="dex-head"><div class="ava" aria-hidden="true">${p.emoji}</div>
-      <div><small>${esc(line)}</small><b>${p.name}</b><i>Frankfurt ↔ Darmstadt · ${s.n.toLocaleString("ko-KR")}회 관찰</i></div></div>
+      <div><small>${esc(line)}</small><b>${p.name}</b><i>프랑크푸르트 근교 노선 · ${s.n.toLocaleString("ko-KR")}회 관찰</i></div></div>
     <div class="stats-rpg">
       ${statBar("성실함", 1 - s.p6, 1, pct(1 - s.p6))}
       ${statBar("느긋함", s.mean, 8, `평균 ${s.mean}분`)}
@@ -55,11 +65,11 @@ export function characterCard(line: string, data: Data): string {
 
 /** Character dex: one large card for the selected line, small tiles for the others. */
 export function renderDex(data: Data, selected: string): string {
-  const lines = data.corridor.lines.filter((l) => data.corridor.characters[l]);
+  const lines = dexLines(data);
   const sel = lines.includes(selected) ? selected : lines[0];
   return `<section class="dex">
     <h1>🚆 열차 캐릭터 도감</h1>
-    <p class="sub">Frankfurt ↔ Darmstadt를 달리는 열차들의 성격 · 실제 기록 ${esc(data.meta.data_from)} ~ ${esc(data.meta.data_until)}</p>
+    <p class="sub">프랑크푸르트 근교 ${data.corridor.routes.length}개 노선을 달리는 열차들의 성격 · 실제 기록 ${esc(data.meta.data_from)} ~ ${esc(data.meta.data_until)}</p>
     <div class="dex-tabs" role="tablist">${lines.map((l) => `<button role="tab" data-line="${esc(l)}" aria-selected="${l === sel}" class="${l === sel ? "on" : ""}">${esc(l)}</button>`).join("")}</div>
     ${characterCard(sel, data)}
     <div class="dex-mini">${lines

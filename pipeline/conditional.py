@@ -1,4 +1,4 @@
-"""P(late arrival | delay at departure) for corridor trips — the Phase 5 "already X min late" signal.
+"""P(late arrival | delay at departure) for route trips — the Phase 5 "already X min late" signal.
 
 The live feed (pipeline/live.py) knows how late a corridor train is at its origin right now. This
 table turns that into the probability of arriving ≥6 / ≥15 min late at the destination:
@@ -53,11 +53,11 @@ def predict(table: pd.DataFrame, trips: pd.DataFrame) -> np.ndarray:
     return keyed.merge(table, on=["direction", "line", "bin"], how="left")["p6"].to_numpy()
 
 
-def export_table(trips: pd.DataFrame, lines: list[str], min_n: int) -> dict:
+def export_table(trips: pd.DataFrame, lines_by_direction: dict[str, list[str]], min_n: int) -> dict:
     """JSON for corridor.json: per direction and line, one {n, p6, p15} (or null) per bin."""
     t = fit_table(trips)
     out = {"bins": LABELS, "edges": EDGES, "cells": {}}
-    for direction in ("ffm_da", "da_ffm"):
+    for direction, lines in lines_by_direction.items():
         out["cells"][direction] = {}
         for line in lines:
             rows = t[(t["direction"] == direction) & (t["line"] == line)].set_index("bin")
@@ -102,7 +102,7 @@ def main() -> None:
     table = fit_table(ran)
     report = [
         "# Phase 5 — 출발 지연을 알 때의 도착 지연 예보 (백테스트)", "",
-        f"생성: {dt.datetime.now():%Y-%m-%d %H:%M} · 홀드아웃 {months[0]} ~ {months[-1]} · 코리도어 운행 (취소 제외)", "",
+        f"생성: {dt.datetime.now():%Y-%m-%d %H:%M} · 홀드아웃 {months[0]} ~ {months[-1]} · 노선 운행 (취소 제외)", "",
         "실시간 피드가 \"지금 출발역에서 X분 지연\"을 알려줄 때, 도착역 6분 이상 지연 확률을 얼마나 더 잘 맞히는지.", "",
         "| 월 | n | 실제 | 시간대 예보 Brier | 출발 지연 조건부 Brier |", "|---|---|---|---|---|",
         *[f"| {m} | {n:,} | {r:.1%} | {u:.4f} | {c:.4f} |" for m, n, r, u, c in rows],
@@ -116,7 +116,7 @@ def main() -> None:
         if m.any():
             report.append(f"| {label} | {m.sum():,} | {y[m].mean():.1%} | {pc[m].mean():.1%} | {pu[m].mean():.1%} |")
     report += ["", "## 전체 데이터 기준 표 (방향 × 노선, 도착 6분 이상 지연 확률)", ""]
-    for direction in ("ffm_da", "da_ffm"):
+    for direction in sorted(table["direction"].unique()):
         sub = table[table["direction"] == direction]
         lines = sub.groupby("line")["n"].sum().sort_values(ascending=False)
         lines = lines[lines >= 300].index
