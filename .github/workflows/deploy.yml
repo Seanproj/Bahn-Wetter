@@ -29,6 +29,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,9 +57,12 @@ jobs:
 
       - name: Install card fonts and browser
         run: |
-          # Korean text and color emoji for the share card.
+          # Korean text and color emoji for the share card. Skip man-db index rebuilds, which can stall
+          # apt for many minutes on GitHub runners.
+          echo "set man-db/auto-update false" | sudo debconf-communicate >/dev/null
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update -qq
-          sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji
+          sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk fonts-noto-color-emoji
           uv sync --group cards
           uv run --group cards playwright install --with-deps chromium
 
