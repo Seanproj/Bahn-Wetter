@@ -62,11 +62,12 @@ jobs:
         timeout-minutes: 6
         run: |
           # Korean text and color emoji for the share card. Skip man-db index rebuilds, which can stall
-          # apt for many minutes on GitHub runners.
-          echo "set man-db/auto-update false" | sudo debconf-communicate >/dev/null
+          # apt for many minutes. Each apt call is time-capped and traced, so a stall shows where it is.
+          set -x
           sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk fonts-noto-color-emoji
+          sudo timeout 120 apt-get update -q -o DPkg::Lock::Timeout=60
+          sudo DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -q --no-install-recommends \
+            -o DPkg::Lock::Timeout=60 fonts-noto-cjk fonts-noto-color-emoji
           uv sync --group cards
           uv run --group cards playwright install --with-deps chromium
 
