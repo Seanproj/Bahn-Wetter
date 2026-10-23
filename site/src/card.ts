@@ -2,7 +2,7 @@
 
 import type { Data, Forecast } from "./data";
 import { DAYTYPE_LABEL, formatDate } from "./time";
-import { bestTrain, directionOverall, dirText, DISCLAIMER, esc, type Ctx } from "./views";
+import { bestTrain, directionOverall, dirText, DISCLAIMER, esc, luckyHours, type Ctx } from "./views";
 import { freqText, pct, weatherOf } from "./weather";
 
 /** One fun line from the weekly ranking: the biggest single delay in the last 7 days of data. */
@@ -25,9 +25,7 @@ export function renderCard(data: Data, ctx: Ctx): string {
   const main_route = data.corridor.routes[0]; // the card's commute: first route in config
   const am = bestTrain(data, main_route.out, ctx.dayType, [6, 7, 8, 9]);
   const pm = bestTrain(data, main_route.in, ctx.dayType, [16, 17, 18, 19]);
-  const hours = Object.entries(day.hours).map(([h, f]) => ({ h: Number(h), f })).filter(({ h, f }) => h >= 6 && f.p6 !== null);
-  const lucky = hours.reduce((m, x) => (x.f.p6! < m.f.p6! ? x : m));
-  const careful = hours.reduce((m, x) => (x.f.p6! > m.f.p6! ? x : m));
+  const luck = luckyHours(data, main_route.out, ctx.dayType, [6, 7, 8, 9]);
   const grade = (f: Forecast) => weatherOf(f, meta);
 
   const main = am ? grade(am.f) : null;
@@ -41,7 +39,7 @@ export function renderCard(data: Data, ctx: Ctx): string {
       <div class="c-grade"><div class="stamp g-${main.name}">${esc(main.fortune ?? main.label)}</div>
         <div><b>${am.hour}시대 ${esc(am.line)} 타는 당신</b><span>${esc(dirText(data, main_route.out))} · 늦을 확률 ${pct(am.f.p6)}</span></div></div>
       <p class="c-msg">${esc(main.fortune_text ?? main.text)}</p>
-      <div class="c-lucky"><div>🍀 행운의 시간 <b>${lucky.h}시</b></div><div>⚠️ 조심할 시간 <b>${careful.h}시</b></div></div>
+      ${luck ? `<div class="c-lucky"><div>🍀 행운의 시간 <b>${luck.lucky.h}시</b></div><div>⚠️ 조심할 시간 <b>${luck.careful.h}시</b></div></div>` : ""}
     </div>` : ""}
     <p class="c-routes-title">오늘의 노선 운세 <small>Frankfurt 출발 · 하루 평균</small></p>
     <div class="c-routes">${data.corridor.routes

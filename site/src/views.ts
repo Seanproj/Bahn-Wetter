@@ -67,9 +67,12 @@ export function dirText(data: Data, dir: Direction): string {
 }
 
 /** One forecast for a whole direction on a day type: all its lines, weighted by number of trains. */
-export function directionOverall(data: Data, dir: Direction, dayType: DayType): Forecast | null {
+/** Run-weighted average over the direction's lines: the whole day, or one departure hour. */
+export function directionOverall(data: Data, dir: Direction, dayType: DayType, hour?: number): Forecast | null {
   const cells = data.corridor.cells[dir]?.[dayType] ?? {};
-  const fs = linesOf(data, dir).map((l) => cells[l]?.overall).filter((f): f is Forecast => !!f && f.p6 !== null);
+  const fs = linesOf(data, dir)
+    .map((l) => (hour === undefined ? cells[l]?.overall : cells[l]?.hours[String(hour)]))
+    .filter((f): f is Forecast => !!f && f.p6 !== null);
   const n = fs.reduce((a, f) => a + f.n, 0);
   if (!n) return null;
   const avg = (k: "p6" | "p15" | "p30" | "pc") => fs.reduce((a, f) => a + (f[k] ?? 0) * f.n, 0) / n;
@@ -91,11 +94,16 @@ function routePicker(data: Data, ctx: Ctx, dark = false): string {
 }
 
 /** Lucky / careful hour at Frankfurt Hbf for the selected day type (06–23). */
-function luckyHours(data: Data, ctx: Ctx) {
-  const hours = Object.entries(data.hub.daytypes[ctx.dayType].hours)
-    .map(([h, f]) => ({ h: Number(h), f }))
-    .filter(({ h, f }) => h >= 6 && f.p6 !== null);
-  const by = (sign: number) => hours.reduce((m, x) => (sign * (x.f.p6! - m.f.p6!) < 0 ? x : m));
+/**
+ * Best and worst departure hour within `window`. Each hour counts as its best train (the one bestTrain would
+ * pick for that hour alone), so the lucky hour always agrees with the recommended train.
+ */
+export function luckyHours(data: Data, dir: Direction, dayType: DayType, window: number[]) {
+  const hours = window
+    .map((h) => ({ h, f: bestTrain(data, dir, dayType, [h])?.f }))
+    .filter((x): x is { h: number; f: Forecast } => !!x.f);
+  if (hours.length < 2) return null;
+  const by = (sign: number) => hours.reduce((m, x) => (sign * (pickScore(x.f) - pickScore(m.f)) < 0 ? x : m));
   return { lucky: by(1), careful: by(-1) };
 }
 
@@ -105,7 +113,9 @@ export function renderHome(data: Data, ctx: Ctx): string {
   const isToday = ctx.dayType === ctx.today;
   const window = bestWindow(ctx);
   const best = bestTrain(data, ctx.direction, ctx.dayType, window.hours);
-  const { lucky, careful } = luckyHours(data, ctx);
+  // same hours as the train pick; a window too short to compare widens to the rest of the day
+  const rest = Array.from({ length: 24 - (window.hours[0] ?? 6) }, (_, i) => (window.hours[0] ?? 6) + i);
+  const luck = luckyHours(data, ctx.direction, ctx.dayType, window.hours) ?? luckyHours(data, ctx.direction, ctx.dayType, rest);
   const title = isToday
     ? { "오늘 아침": "오늘의 출근 운세", "오늘 저녁": "오늘의 퇴근 운세" }[window.label] ?? "오늘 밤 열차 운세"
     : `${DAYTYPE_LABEL[ctx.dayType]} 출근 운세`;
@@ -122,11 +132,12 @@ export function renderHome(data: Data, ctx: Ctx): string {
           <div class="slip-grade"><div class="stamp g-${w.name}">${esc(w.fortune ?? w.label)}</div>
             <div><b>${best.hour}시대 ${esc(best.line)} 타는 당신</b>
             <span>늦을 확률 ${pct(best.f.p6)} · ${freqText(best.f.p6!)} 늦음</span></div></div>
-          <p class="slip-msg">${esc(w.fortune_text ?? w.text)}<br><em>${best.hour}시대 ${esc(best.line)}</em>이 오늘의 행운 열차.</p>
-          <div class="slip-lucky">
-            <div>🍀 행운의 시간<b>${lucky.h}시 · ${gradeTag(lucky.f, data, "plain")}</b></div>
-            <div>⚠️ 조심할 시간<b>${careful.h}시 · ${gradeTag(careful.f, data, "plain")}</b></div>
-          </div>
+          <p class="slip-msg">${esc(w.fortune_text ?? w.text)}<br><em>${best.hour}시대 ${esc(best.line)}</em>${
+            ["storm", "rain"].includes(w.name) ? "이 그나마 가장 나은 선택." : "이 오늘의 행운 열차."}</p>
+          ${luck ? `<div class="slip-lucky">
+            <div>🍀 행운의 시간<b>${luck.lucky.h}시 · ${gradeTag(luck.lucky.f, data, "plain")}</b></div>
+            <div>⚠️ 조심할 시간<b>${luck.careful.h}시 · ${gradeTag(luck.careful.f, data, "plain")}</b></div>
+          </div>` : ""}
         </div>
         ${others.length ? `<p class="others-title">같은 ${best.hour}시대 다른 열차</p>
         <ol class="others">${others
