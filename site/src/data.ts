@@ -150,7 +150,8 @@ export interface Data {
 }
 
 async function getJson<T>(name: string): Promise<T> {
-  const res = await fetch(`${import.meta.env.BASE_URL}data/${name}`);
+  // no-cache: revalidate (ETag) every load, so fresh JS never meets JSON cached from the previous deploy
+  const res = await fetch(`${import.meta.env.BASE_URL}data/${name}`, { cache: "no-cache" });
   if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
   return res.json() as Promise<T>;
 }
