@@ -36,11 +36,14 @@ def main() -> None:
         if dst.exists() and not args.force:
             print(f"skip {src.name}")
             continue
+        # Write to a temp name first: an interrupted run must not leave a partial file that later runs skip.
+        tmp = dst.with_suffix(".tmp")
         con.execute(
             f"COPY (SELECT * FROM read_parquet('{src}') WHERE eva IN (SELECT unnest(?)))"
-            f" TO '{dst}' (FORMAT parquet, COMPRESSION zstd)",
+            f" TO '{tmp}' (FORMAT parquet, COMPRESSION zstd)",
             [evas],
         )
+        tmp.replace(dst)
         n = con.execute(f"SELECT count(*) FROM read_parquet('{dst}')").fetchone()[0]
         print(f"{src.name}: {n:,} rows, {src.stat().st_size / 1e6:.0f} MB → {dst.stat().st_size / 1e6:.1f} MB")
         if args.delete_source:

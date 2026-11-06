@@ -30,7 +30,7 @@ function save(key: string, value: string) {
 }
 
 let data: Data;
-const now = berlinNow();
+let liveFetchedAt = 0;
 let dayType: DayType | null = null; // null = today
 let direction: Direction = store<Direction>("direction", "");
 let dexLine = store<string>("dexLine", "");
@@ -44,6 +44,7 @@ function parseHash(): { route: Route; params: URLSearchParams } {
 
 function render() {
   const { route: r, params } = parseHash();
+  const now = berlinNow(); // per render, so a tab left open across hours or midnight stays correct
   // The share card can be rendered for any day (cards/make_card.py passes ?date=).
   const at = r === "card" ? (berlinDay(params.get("date") ?? "") ?? now) : now;
   const today = dayTypeOf(at, data.meta);
@@ -93,7 +94,7 @@ app.addEventListener("click", (e) => {
   const chip = t.closest<HTMLElement>("[data-daytype]");
   if (chip) {
     const d = chip.dataset.daytype as DayType;
-    dayType = d === dayTypeOf(now, data.meta) ? null : d;
+    dayType = d === dayTypeOf(berlinNow(), data.meta) ? null : d;
     return render();
   }
   const routeChip = t.closest<HTMLElement>("[data-route]");
@@ -146,19 +147,30 @@ window.addEventListener("hashchange", () => {
   window.scrollTo(0, 0);
 });
 
+/** Live data is optional: render first, then add it if a fresh snapshot exists (not on the card). */
+function refreshLive() {
+  liveFetchedAt = Date.now();
+  loadLive(data.meta).then((live) => {
+    const had = data.live !== null;
+    data.live = live; // null drops a snapshot that went stale while the tab was open
+    if ((live || had) && parseHash().route !== "card") render();
+  });
+}
+
+// Coming back to a tab left open: re-render for the current hour and fetch a newer live snapshot.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !data || sheet.open) return;
+  if (Date.now() - liveFetchedAt > 5 * 60_000) refreshLive();
+  else render();
+});
+
 loadData()
   .then((d) => {
     data = d;
     if (!d.corridor.directions[direction]) direction = d.corridor.routes[0].out; // first visit or a removed route
     footer.innerHTML = renderFooter(d);
     render();
-    // Live data is optional: render first, then add it if a fresh snapshot exists (not on the card).
-    loadLive(d.meta).then((live) => {
-      if (live && parseHash().route !== "card") {
-        data.live = live;
-        render();
-      }
-    });
+    refreshLive();
   })
   .catch((err) => {
     app.innerHTML = `<section class="card"><h2>예보를 불러오지 못했어요</h2><p class="note">${String(err)}</p></section>`;

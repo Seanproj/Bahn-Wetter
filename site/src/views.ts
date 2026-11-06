@@ -31,7 +31,7 @@ function icon(f: Forecast | null | undefined, data: Data, cls = ""): string {
 
 /** Data attributes so a tap can open the detail sheet. Corridor cells also pass line + direction. */
 function detailAttrs(title: string, f: Forecast, trip?: { line: string; direction: Direction }): string {
-  return `data-detail='${esc(JSON.stringify({ title, f, trip }))}'`;
+  return `data-detail='${esc(JSON.stringify({ title, f, trip }))}' role="button"`;
 }
 
 // ── Home: today's fortune (운세) ─────────────────────────────────────────
@@ -66,7 +66,6 @@ export function dirText(data: Data, dir: Direction): string {
   return dir === r.out ? `Frankfurt → ${r.label}` : `${r.label} → Frankfurt`;
 }
 
-/** One forecast for a whole direction on a day type: all its lines, weighted by number of trains. */
 /** Run-weighted average over the direction's lines: the whole day, or one departure hour. */
 export function directionOverall(data: Data, dir: Direction, dayType: DayType, hour?: number): Forecast | null {
   const cells = data.corridor.cells[dir]?.[dayType] ?? {};
@@ -93,7 +92,6 @@ function routePicker(data: Data, ctx: Ctx, dark = false): string {
   </div>`;
 }
 
-/** Lucky / careful hour at Frankfurt Hbf for the selected day type (06–23). */
 /**
  * Best and worst departure hour within `window`. Each hour counts as its best train (the one bestTrain would
  * pick for that hour alone), so the lucky hour always agrees with the recommended train.
@@ -181,7 +179,7 @@ export function renderHome(data: Data, ctx: Ctx): string {
   </section>
 
   <section class="card total">
-    <h2>${esc(meta.stations[hub.station])} 오늘의 총운</h2>
+    <h2>${esc(meta.stations[hub.station])} ${isToday ? "오늘의" : DAYTYPE_LABEL[ctx.dayType]} 총운</h2>
     <p class="total-main">${gradeTag(total, data, "grade big")}<span>열차 <b>${freqText(total.p6 ?? 0)}</b>가<br>6분 넘게 늦어요</span></p>
     ${nowF ? `<p class="total-now">지금 ${ctx.now.hour}시대 ${gradeTag(nowF, data, "plain")} · ${pct(nowF.p6)}</p>` : ""}
     ${isToday && nowF ? liveHub(data, nowF) : ""}
