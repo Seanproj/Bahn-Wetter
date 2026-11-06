@@ -85,7 +85,7 @@ body[data-sky="rain"] .hero, body[data-sky="storm"] .hero, body[data-sky="tornad
 a { color: var(--accent); }
 h1, h2, p { margin: 0; }
 
-.top, main, footer { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+.top, main, footer, #banner, #hint { max-width: 560px; margin: 0 auto; padding: 0 16px; }
 .top { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; gap: 8px; }
 .brand { font-weight: 800; font-size: 1.05rem; color: inherit; text-decoration: none; }
 .tag { font-size: 0.72rem; padding: 4px 9px; border-radius: 99px; background: var(--chip); }
@@ -568,3 +568,27 @@ body[data-sky="fortune"] .teaser { background: rgba(255, 255, 255, 0.07); border
 }
 .c-url { margin: 8px 0 10px; text-align: center; font-size: 13px; color: #f3e6c8; letter-spacing: 0.01em; opacity: 0.85; }
 .c-url b { color: #ffd76a; font-weight: 800; }
+
+/* ── Outside an app: in-app browser banner, home-screen hint ─────────── */
+.banner { margin: 10px 0 0; padding: 12px 14px; border-radius: 16px; background: #ffd76a; color: #2b1d0e;
+  font-size: 0.85rem; line-height: 1.45; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25); }
+.b-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.b-btn { display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 10px; border: 0; background: #1d1430; color: #fff;
+  font: 800 0.82rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.b-btn.ghost { background: transparent; color: inherit; border: 1.5px solid currentColor; }
+.b-how { font-size: 0.8rem; }
+.b-x { margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 1rem; padding: 4px 6px; cursor: pointer; opacity: 0.7; }
+.hint { position: relative; display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 0.85rem; line-height: 1.45; padding-right: 36px; }
+.hint .b-btn { flex: 0 0 auto; }
+.hint .b-x { position: absolute; top: 8px; right: 8px; }
+body[data-sky="fortune"] .hint { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.12); color: #f3e6c8; }
+body[data-sky="fortune"] .hint .b-btn { background: #f3e6c8; color: #1d1430; }
+.copy-box { width: 100%; margin: 10px 0; padding: 10px; border-radius: 10px; font: 0.9rem/1.5 system-ui, sans-serif; resize: none; }
+.banner { position: relative; padding-right: 36px; }
+.banner .b-x { position: absolute; top: 6px; right: 6px; margin: 0; }
+/* Desktop: the tab bar floats as a pill under the content column instead of spanning the screen. */
+@media (min-width: 760px) {
+  .tabs { inset: auto 0 16px 0; width: 520px; margin: 0 auto; border: 1px solid var(--card-border); border-radius: 22px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); padding-bottom: 8px; }
+  main { padding-bottom: 40px; }
+}

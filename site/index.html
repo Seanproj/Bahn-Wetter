@@ -18,7 +18,12 @@
     <meta property="og:image:height" content="1350" />
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌦️</text></svg>" />
+    <link rel="icon" href="icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bahn-Wetter" />
   </head>
   <body data-sky="cloudy">
     <div id="sky" aria-hidden="true">
@@ -38,7 +43,9 @@
       <a href="#/ranking" data-route="ranking">🏆<span>랭킹</span></a>
       <a href="#/about" data-route="about">ℹ️<span>소개</span></a>
     </nav>
+    <div id="banner"></div>
     <main id="app" aria-live="polite"><p class="loading">예보 불러오는 중…</p></main>
+    <div id="hint"></div>
     <footer id="footer"></footer>
     <dialog id="sheet" aria-label="상세 예보"></dialog>
     <p id="toast" role="status" aria-live="polite"></p>

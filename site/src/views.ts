@@ -428,10 +428,20 @@ export function renderAbout(data: Data): string {
        도착 지연 확률은 과거 기록에서 <b>출발이 그만큼 늦었던 열차가 실제로 얼마나 늦게 도착했는지</b>로 계산해요.
        출퇴근 표의 칸을 누르면 "출발이 늦으면?" 표에서 노선별로 볼 수 있어요. 실시간 데이터가 없거나 30분 넘게 지나면 표시하지 않아요.</p>
 
+    <h2>이렇게 쓰면 편해요</h2>
+    <p>앱 설치 없이 웹사이트로 바로 써요. 로그인도 필요 없어요.</p>
+    <ul class="legend">
+      <li><b>📲 홈 화면에 추가</b> — iPhone은 Safari 아래 공유 버튼 → "홈 화면에 추가", Android는 Chrome 메뉴 → "홈 화면에 추가". 앱처럼 바로 열리고, 인터넷이 끊겨도 마지막 예보를 볼 수 있어요.</li>
+      <li><b>🧵 Threads·인스타·카톡에서 열었다면</b> — 앱 안 브라우저에서는 홈 화면 추가가 안 돼요. 오른쪽 위 메뉴에서 "외부 브라우저로 열기"를 눌러 주세요.</li>
+      <li><b>📤 공유</b> — 운세 카드의 "내 운세 공유하기"로 친구에게 보내거나, 매일 아침 만들어지는 카드 이미지를 그대로 공유해도 돼요. 카드에 출처가 들어 있어요.</li>
+    </ul>
+    <p>개인정보는 모으지 않아요. 고른 노선만 이 기기(브라우저)에 저장해요.</p>
+
     <h2>데이터 출처</h2>
     <p>${esc(meta.attribution.text.split(",")[0])}, via <a href="${meta.attribution.source_url}" rel="noopener">piebro/deutsche-bahn-data</a>.
        라이선스: <a href="${meta.attribution.license_url}" rel="noopener">CC BY 4.0</a>.
-       원본 운행 기록을 이 서비스에서 확률로 집계·가공했어요.</p>
+       원본 운행 기록을 이 서비스에서 확률로 집계·가공했어요.
+       실시간 정보: Deutsche Bahn Timetables API (DB API Marketplace).</p>
     <p>이 사이트는 Deutsche Bahn과 관련 없는 비공식 서비스이며, Deutsche Bahn이 내용을 보증하지 않아요.</p>
     <h2>공유 카드</h2>
     <p>매일 아침 그날의 예보 카드(1080×1350)가 자동으로 만들어져요: <a href="cards/latest.png">오늘의 카드 PNG</a></p>

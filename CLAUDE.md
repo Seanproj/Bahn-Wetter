@@ -65,6 +65,11 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - Sharing: the home slip has a share button (Web Share API, clipboard fallback) and a link to `cards/latest.png`;
   index.html carries Open Graph tags whose image is the daily `cards/latest.png`, so link previews show today's card.
   The share card prints the site URL. The home teaser shows the ranking's biggest delay with its data dates.
+- Outside an app (site/src/install.ts): web app manifest + icons (site/public/icons) for "add to home screen";
+  `public/sw.js` serves pages and data/*.json network-first (cached copy offline), hashed assets cache-first,
+  and never touches other origins (live.json). In-app browsers (Threads = "Barcelona" UA, Instagram, KakaoTalk, …)
+  get a banner to open the real browser; iOS Safari / Chrome get a dismissible home-screen hint on the home tab.
+  Sharing falls back from the share sheet to clipboard to a manual-copy sheet. No tracking; only preferences in localStorage.
 - `#/card?date=YYYY-MM-DD` renders the share card for any day; animated sky layers live in `#sky` and stop
   under prefers-reduced-motion.
 
@@ -89,7 +94,7 @@ config/
   weather.yaml         probability → weather icon thresholds and copy
   model.yaml           hyper-parameters chosen by backtest.py (generated)
   live.yaml            URL of the published live.json (raw.githubusercontent.com, branch live-data) + max age
-site/                Vite + vanilla TS static site (src/: data, time, weather, views, fun, ranking, card, main)
+site/                Vite + vanilla TS static site (src/: data, time, weather, views, fun, ranking, card, install, main)
 cards/               make_card.py: Playwright screenshot of #/card → cards/out/ (gitignored)
 .github/workflows/   refresh-data.yml (monthly data), deploy.yml (Pages + daily card), live.yml (15-min live feed)
 tests/               pytest; fixtures/timetables = real API responses (2026-09-09 20:36 Berlin), gzipped

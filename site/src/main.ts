@@ -6,6 +6,7 @@ import { renderRanking } from "./ranking";
 import { berlinDay, berlinNow, dayTypeOf } from "./time";
 import { commuteSky, conditionalTable, esc, homeSky, renderAbout, renderCommute, renderFooter, renderHome, type Ctx } from "./views";
 import { pct, sampleNote, weatherOf } from "./weather";
+import { bannerHtml, copyText, detectEnv, dismiss, hintHtml, registerServiceWorker } from "./install";
 
 type Route = "home" | "commute" | "ranking" | "about" | "card";
 const ROUTES: Route[] = ["home", "commute", "ranking", "about", "card"];
@@ -14,6 +15,10 @@ const app = document.querySelector<HTMLElement>("#app")!;
 const footer = document.querySelector<HTMLElement>("#footer")!;
 const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
 const toast = document.querySelector<HTMLElement>("#toast")!;
+const banner = document.querySelector<HTMLElement>("#banner")!;
+const hint = document.querySelector<HTMLElement>("#hint")!;
+const env = detectEnv();
+let installPrompt: (Event & { prompt: () => Promise<void> }) | null = null;
 
 function showToast(text: string) {
   toast.textContent = text;
@@ -21,16 +26,25 @@ function showToast(text: string) {
   setTimeout(() => toast.classList.remove("on"), 2200);
 }
 
-/** Native share sheet on phones; elsewhere copy text + link to the clipboard. */
+const siteUrl = () => location.href.split("#")[0];
+
+/**
+ * Native share sheet where it works; otherwise copy text + link. In-app browsers often expose
+ * navigator.share but fail, so a failure falls through to copying, and copying to a manual-copy sheet.
+ */
 async function share(text: string) {
-  const url = location.href.split("#")[0];
-  try {
-    if (navigator.share) return await navigator.share({ title: "Bahn-Wetter", text, url });
-    await navigator.clipboard.writeText(`${text}\n${url}`);
-    showToast("복사했어요! 붙여넣기로 공유하세요");
-  } catch (e) {
-    if ((e as Error).name !== "AbortError") showToast("공유하지 못했어요");
+  const url = siteUrl();
+  if (navigator.share && !env.inApp) {
+    try {
+      return await navigator.share({ title: "Bahn-Wetter", text, url });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+    }
   }
+  if (await copyText(`${text}\n${url}`)) return showToast("복사했어요! 붙여넣기로 공유하세요");
+  sheet.innerHTML = `<form method="dialog"><p class="sheet-title">아래 내용을 길게 눌러 복사하세요</p>
+    <textarea class="copy-box" readonly rows="5">${esc(`${text}\n${url}`)}</textarea><button class="close">닫기</button></form>`;
+  sheet.showModal();
 }
 
 function store<T extends string>(key: string, fallback: T): T {
@@ -78,6 +92,8 @@ function render() {
   }[r];
   const [html, sky] = view();
   app.innerHTML = html;
+  banner.innerHTML = r === "card" ? "" : bannerHtml(env);
+  hint.innerHTML = r === "home" ? hintHtml(env, installPrompt !== null) : "";
   document.body.dataset.sky = sky;
   document.querySelectorAll<HTMLAnchorElement>("nav.tabs a").forEach((a) => {
     a.setAttribute("aria-current", a.dataset.route === r ? "page" : "false");
@@ -163,6 +179,32 @@ sheet.addEventListener("click", (e) => {
   }
   if (e.target === sheet) sheet.close(); // tap on backdrop
 });
+// Banner / home-screen hint buttons (outside #app).
+document.addEventListener("click", async (e) => {
+  const t = e.target as HTMLElement;
+  const close = t.closest<HTMLElement>("[data-dismiss]");
+  if (close) {
+    dismiss(close.dataset.dismiss!);
+    close.closest(".banner, .hint")?.remove();
+  } else if (t.closest("[data-copy-link]")) {
+    showToast((await copyText(siteUrl())) ? "링크를 복사했어요. 브라우저 주소창에 붙여넣으세요" : siteUrl());
+  } else if (t.closest("[data-install]") && installPrompt) {
+    await installPrompt.prompt();
+    installPrompt = null;
+    hint.innerHTML = "";
+  }
+});
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); // show our own button on the home tab instead of the browser's mini-bar
+  installPrompt = e as typeof installPrompt;
+  if (data && parseHash().route === "home") hint.innerHTML = hintHtml(env, true);
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  hint.innerHTML = "";
+});
+registerServiceWorker();
+
 window.addEventListener("hashchange", () => {
   render();
   window.scrollTo(0, 0);
