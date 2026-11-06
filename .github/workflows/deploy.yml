@@ -55,21 +55,54 @@ jobs:
       - name: Run tests
         run: uv run pytest -q tests
 
+      # The Korean font comes from a slow apt mirror (61 MB, at times several minutes), so keep it in the
+      # Actions cache: only a cache miss pays for apt.
+      - name: Restore card font
+        id: font-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.local/share/fonts/noto-cjk
+          key: noto-cjk-v1
+
       # The share card is a bonus: a stalled apt mirror must not block the site deploy.
       - name: Install card fonts and browser
         id: card-deps
         continue-on-error: true
-        timeout-minutes: 6
+        timeout-minutes: 10
+        env:
+          FONT_HIT: ${{ steps.font-cache.outputs.cache-hit }}
         run: |
-          # Korean text and color emoji for the share card. Skip man-db index rebuilds, which can stall
-          # apt for many minutes. Each apt call is time-capped and traced, so a stall shows where it is.
+          # Each apt call is time-capped and traced, so a stall shows where it is. Skip man-db rebuilds.
           set -x
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo timeout 120 apt-get update -q -o DPkg::Lock::Timeout=60
-          sudo DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -q --no-install-recommends \
-            -o DPkg::Lock::Timeout=60 fonts-noto-cjk fonts-noto-color-emoji
+          pkgs=""
+          [ "$FONT_HIT" = "true" ] || pkgs="fonts-noto-cjk"
+          fc-list | grep -qi "Noto Color Emoji" || pkgs="$pkgs fonts-noto-color-emoji"
+          if [ -n "$pkgs" ]; then
+            sudo rm -f /var/lib/man-db/auto-update
+            sudo timeout 120 apt-get update -q -o DPkg::Lock::Timeout=60
+            sudo DEBIAN_FRONTEND=noninteractive timeout 420 apt-get install -y -q --no-install-recommends \
+              -o DPkg::Lock::Timeout=60 $pkgs
+          fi
+          if [ "$FONT_HIT" != "true" ]; then
+            mkdir -p ~/.local/share/fonts/noto-cjk
+            cp /usr/share/fonts/opentype/noto/NotoSansCJK-*.ttc ~/.local/share/fonts/noto-cjk/
+          fi
+          fc-cache -f ~/.local/share/fonts
+          fc-list :lang=ko | grep -q .  # a Korean font must be there, or the card would show boxes
           uv sync --group cards
-          uv run --group cards playwright install --with-deps chromium
+          # Use the runner's preinstalled Chrome when there is one; downloading Chromium needs apt deps too.
+          if chrome=$(command -v google-chrome || command -v google-chrome-stable); then
+            echo "CHROMIUM_PATH=$chrome" >> "$GITHUB_ENV"
+          else
+            uv run --group cards playwright install --with-deps chromium
+          fi
+
+      - name: Save card font
+        if: steps.card-deps.outcome == 'success' && steps.font-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.local/share/fonts/noto-cjk
+          key: noto-cjk-v1
 
       - name: Render today's share card
         if: steps.card-deps.outcome == 'success'
@@ -79,6 +112,21 @@ jobs:
           day=$(TZ=Europe/Berlin date +%F)
           uv run --group cards python cards/make_card.py --date "$day" --out "site/dist/cards/$day.png"
           cp "site/dist/cards/$day.png" site/dist/cards/latest.png
+
+      # Never publish a site without cards/latest.png (links and previews point at it): if today's card could
+      # not be rendered, carry over the one that is live now.
+      - name: Keep the published card if today's is missing
+        if: github.event_name != 'pull_request'
+        run: |
+          [ -f site/dist/cards/latest.png ] && exit 0
+          mkdir -p site/dist/cards
+          url="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/cards/latest.png"
+          if curl -fsSL --max-time 30 "$url" -o site/dist/cards/latest.png; then
+            echo "::warning::today's card was not rendered; kept the published one"
+          else
+            rm -f site/dist/cards/latest.png
+            echo "::warning::today's card was not rendered and none is published; the site falls back to #/card"
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
