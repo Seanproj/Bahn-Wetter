@@ -15,10 +15,17 @@ export function pct(p: number | null | undefined, digits = 0): string {
   return p === null || p === undefined ? "–" : `${(p * 100).toFixed(digits)}%`;
 }
 
-/** 0.27 → "4대 중 1대", 0.55 → "10대 중 6대": natural frequencies read faster than percentages. */
+/**
+ * 0.25 → "4대 중 1대", 0.4 → "10대 중 4대": natural frequencies read faster than percentages.
+ * Each wording is used only when it stays within 3 points of p (0.4 is not "3대 중 1대"; 0.45 is "100대 중 45대").
+ */
 export function freqText(p: number): string {
-  if (p <= 0) return "100대 중 0대";
-  return p >= 0.5 ? `10대 중 ${Math.round(p * 10)}대` : `${Math.round(1 / p)}대 중 1대`;
+  if (p < 0.005) return "100대 중 0대";
+  if (p < 0.1) return `${Math.round(1 / p)}대 중 1대`;
+  const n = Math.round(1 / p);
+  if (Math.abs(1 / n - p) <= 0.03) return `${n}대 중 1대`;
+  const tens = Math.round(p * 10);
+  return Math.abs(tens / 10 - p) <= 0.03 ? `10대 중 ${tens}대` : `100대 중 ${Math.round(p * 100)}대`;
 }
 
 export function sampleNote(f: Forecast): string {

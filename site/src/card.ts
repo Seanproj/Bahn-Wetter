@@ -52,6 +52,7 @@ export function renderCard(data: Data, ctx: Ctx): string {
       ${tile("Frankfurt Hbf 오늘의 총운", grade(day.overall), "", `열차 ${freqText(day.overall.p6 ?? 0)}가 늦어요`)}
     </div>
     ${weekly(data)}
+    <p class="c-url">🔮 내 노선 운세 보기 · <b>seanproj.github.io/Bahn-Wetter</b></p>
     <footer>
       <p>${esc(DISCLAIMER)}. 6분 이상 지연 기준.</p>
       <p>${esc(meta.attribution.text)} · 확률로 가공됨 · 비공식 서비스</p>

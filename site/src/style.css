@@ -85,7 +85,7 @@ body[data-sky="rain"] .hero, body[data-sky="storm"] .hero, body[data-sky="tornad
 a { color: var(--accent); }
 h1, h2, p { margin: 0; }
 
-.top, main, footer { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+.top, main, footer, #banner, #hint { max-width: 560px; margin: 0 auto; padding: 0 16px; }
 .top { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; gap: 8px; }
 .brand { font-weight: 800; font-size: 1.05rem; color: inherit; text-decoration: none; }
 .tag { font-size: 0.72rem; padding: 4px 9px; border-radius: 99px; background: var(--chip); }
@@ -533,3 +533,62 @@ body[data-sky="dex"] > footer, body[data-sky="dex"] .top { color: var(--dex-ink)
 .grid tbody th { position: sticky; left: 0; z-index: 1; background: var(--card-solid); }
 .grid thead th:first-child { left: 0; z-index: 2; }
 .grid td { min-width: 52px; }
+
+/* ── Share + teaser + delight (design pass) ─────────────────────────── */
+.share-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; margin-top: 12px; }
+.share-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 10px; border-radius: 14px; border: 0;
+  font: 800 0.92rem system-ui, sans-serif; color: #1d1430; background: linear-gradient(135deg, #ffd76a, #ff9a6a); cursor: pointer;
+  text-decoration: none; box-shadow: 0 8px 20px rgba(255, 154, 106, 0.28); }
+.share-btn.ghost { color: #f3e6c8; background: rgba(255, 255, 255, 0.1); box-shadow: none; border: 1px solid rgba(255, 255, 255, 0.16); }
+.share-btn:active { transform: scale(0.97); }
+.teaser { display: flex; align-items: center; gap: 12px; margin-top: 14px; text-decoration: none; color: inherit; }
+body[data-sky="fortune"] .teaser { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.12); color: #f3e6c8; }
+.teaser .t-emoji { font-size: 1.8rem; }
+.teaser small { display: block; font-size: 0.72rem; opacity: 0.7; }
+.teaser b { font-size: 1.05rem; font-weight: 900; }
+.teaser .t-go { margin-left: auto; font-size: 0.78rem; font-weight: 700; opacity: 0.75; white-space: nowrap; }
+#toast { position: fixed; left: 50%; bottom: 96px; transform: translate(-50%, 20px); z-index: 30; padding: 10px 16px; border-radius: 999px;
+  background: #1f1a14; color: #fff; font-size: 0.85rem; font-weight: 700; opacity: 0; pointer-events: none; transition: 0.25s; }
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
+/* The fortune stamp lands on the slip (home only; the share card stays static for screenshots). */
+.slip .stamp { animation: stamp-in 0.55s 0.25s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes stamp-in { from { transform: scale(2.4) rotate(8deg); opacity: 0; } 60% { opacity: 1; } to { transform: rotate(-12deg); opacity: 1; } }
+/* Gacha colour follows the result. */
+.gacha { transition: background 0.3s; }
+.gacha[data-bucket="on"] { background: linear-gradient(135deg, #2fb57a, #7fd1a0); }
+.gacha[data-bucket="bit"] { background: linear-gradient(135deg, #e8b730, #ffd76a); color: #2b1d0e; }
+.gacha[data-bucket="late"] { background: linear-gradient(135deg, #ff8a3d, #ffb347); }
+.gacha[data-bucket="big"] { background: linear-gradient(135deg, #8e1b22, #d6453d); }
+.gacha[data-bucket="gone"] { background: linear-gradient(135deg, #3d2a6b, #7b5cc4); }
+.gacha.pop[data-bucket="big"], .gacha.pop[data-bucket="gone"] { animation: shake 0.4s; }
+@keyframes shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .slip .stamp, .gacha.pop[data-bucket] { animation: none; }
+  #toast { transition: none; }
+}
+.c-url { margin: 8px 0 10px; text-align: center; font-size: 13px; color: #f3e6c8; letter-spacing: 0.01em; opacity: 0.85; }
+.c-url b { color: #ffd76a; font-weight: 800; }
+
+/* ── Outside an app: in-app browser banner, home-screen hint ─────────── */
+.banner { margin: 10px 0 0; padding: 12px 14px; border-radius: 16px; background: #ffd76a; color: #2b1d0e;
+  font-size: 0.85rem; line-height: 1.45; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25); }
+.b-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.b-btn { display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 10px; border: 0; background: #1d1430; color: #fff;
+  font: 800 0.82rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.b-btn.ghost { background: transparent; color: inherit; border: 1.5px solid currentColor; }
+.b-how { font-size: 0.8rem; }
+.b-x { margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 1rem; padding: 4px 6px; cursor: pointer; opacity: 0.7; }
+.hint { position: relative; display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 0.85rem; line-height: 1.45; padding-right: 36px; }
+.hint .b-btn { flex: 0 0 auto; }
+.hint .b-x { position: absolute; top: 8px; right: 8px; }
+body[data-sky="fortune"] .hint { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.12); color: #f3e6c8; }
+body[data-sky="fortune"] .hint .b-btn { background: #f3e6c8; color: #1d1430; }
+.copy-box { width: 100%; margin: 10px 0; padding: 10px; border-radius: 10px; font: 0.9rem/1.5 system-ui, sans-serif; resize: none; }
+.banner { position: relative; padding-right: 36px; }
+.banner .b-x { position: absolute; top: 6px; right: 6px; margin: 0; }
+/* Desktop: the tab bar floats as a pill under the content column instead of spanning the screen. */
+@media (min-width: 760px) {
+  .tabs { inset: auto 0 16px 0; width: 520px; margin: 0 auto; border: 1px solid var(--card-border); border-radius: 22px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); padding-bottom: 8px; }
+  main { padding-bottom: 40px; }
+}

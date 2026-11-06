@@ -31,7 +31,7 @@ function icon(f: Forecast | null | undefined, data: Data, cls = ""): string {
 
 /** Data attributes so a tap can open the detail sheet. Corridor cells also pass line + direction. */
 function detailAttrs(title: string, f: Forecast, trip?: { line: string; direction: Direction }): string {
-  return `data-detail='${esc(JSON.stringify({ title, f, trip }))}'`;
+  return `data-detail='${esc(JSON.stringify({ title, f, trip }))}' role="button"`;
 }
 
 // ── Home: today's fortune (운세) ─────────────────────────────────────────
@@ -66,7 +66,6 @@ export function dirText(data: Data, dir: Direction): string {
   return dir === r.out ? `Frankfurt → ${r.label}` : `${r.label} → Frankfurt`;
 }
 
-/** One forecast for a whole direction on a day type: all its lines, weighted by number of trains. */
 /** Run-weighted average over the direction's lines: the whole day, or one departure hour. */
 export function directionOverall(data: Data, dir: Direction, dayType: DayType, hour?: number): Forecast | null {
   const cells = data.corridor.cells[dir]?.[dayType] ?? {};
@@ -93,7 +92,6 @@ function routePicker(data: Data, ctx: Ctx, dark = false): string {
   </div>`;
 }
 
-/** Lucky / careful hour at Frankfurt Hbf for the selected day type (06–23). */
 /**
  * Best and worst departure hour within `window`. Each hour counts as its best train (the one bestTrain would
  * pick for that hour alone), so the lucky hour always agrees with the recommended train.
@@ -139,12 +137,16 @@ export function renderHome(data: Data, ctx: Ctx): string {
             <div>⚠️ 조심할 시간<b>${luck.careful.h}시 · ${gradeTag(luck.careful.f, data, "plain")}</b></div>
           </div>` : ""}
         </div>
+        <div class="share-row">
+          <button type="button" class="share-btn" data-share="${esc(shareText(data, ctx, best, w))}">📤 내 운세 공유하기</button>
+          <a class="share-btn ghost" href="cards/latest.png" target="_blank" rel="noopener">🖼️ 오늘의 카드</a>
+        </div>
         ${others.length ? `<p class="others-title">같은 ${best.hour}시대 다른 열차</p>
         <ol class="others">${others
           .map(({ l, f }) => {
             const ow = weatherOf(f, meta);
             return `<li ${detailAttrs(`${l} · ${best.hour}시 출발`, f, { line: l, direction: ctx.direction })} tabindex="0">
-              <span class="badge">${esc(l)}</span><span class="t">${esc((ow.fortune_text ?? ow.text).split(".")[0])}.</span>${gradeTag(f, data)}</li>`;
+              <span class="badge">${esc(l)}</span><span class="t"><b>${pct(f.p6)}</b> · ${esc((ow.fortune_text ?? ow.text).split(".")[0])}.</span>${gradeTag(f, data)}</li>`;
           })
           .join("")}</ol>` : ""}`;
       })()
@@ -180,8 +182,10 @@ export function renderHome(data: Data, ctx: Ctx): string {
     ${slip}
   </section>
 
+  ${weeklyTeaser(data)}
+
   <section class="card total">
-    <h2>${esc(meta.stations[hub.station])} 오늘의 총운</h2>
+    <h2>${esc(meta.stations[hub.station])} ${isToday ? "오늘의" : DAYTYPE_LABEL[ctx.dayType]} 총운</h2>
     <p class="total-main">${gradeTag(total, data, "grade big")}<span>열차 <b>${freqText(total.p6 ?? 0)}</b>가<br>6분 넘게 늦어요</span></p>
     ${nowF ? `<p class="total-now">지금 ${ctx.now.hour}시대 ${gradeTag(nowF, data, "plain")} · ${pct(nowF.p6)}</p>` : ""}
     ${isToday && nowF ? liveHub(data, nowF) : ""}
@@ -203,6 +207,25 @@ export function renderHome(data: Data, ctx: Ctx): string {
     <h3>노선별 <small>하루 전체</small></h3>
     <ol class="lines">${lines}</ol>
   </details>`;
+}
+
+/** Text for the share sheet: grade, train and odds, so the post reads well without the link preview. */
+function shareText(data: Data, ctx: Ctx, best: { line: string; hour: number; f: Forecast }, w: { fortune?: string; label: string }): string {
+  return `🔮 ${dirText(data, ctx.direction)} 운세: ${w.fortune ?? w.label}\n${best.hour}시대 ${best.line} · 늦을 확률 ${pct(best.f.p6)}\n당신의 열차 운세는?`;
+}
+
+/** Hook into the ranking tab: the biggest single delay in the last 7 days of data (not the calendar week). */
+function weeklyTeaser(data: Data): string {
+  const big = data.ranking.hub.biggest;
+  const md = (iso: string) => iso.slice(5).replace("-", "/").replace(/^0/, "").replace("/0", "/");
+  const w = data.ranking.window;
+  const h = Math.floor(big.delay / 60);
+  const text = h ? `${h}시간 ${big.delay % 60}분` : `${big.delay}분`;
+  return `<a class="card teaser" href="#/ranking">
+    <span class="t-emoji" aria-hidden="true">💀</span>
+    <span><small>${md(w.from)}–${md(w.to)} 최대 지연 · ${md(big.date)} ${big.time}</small><b>${esc(big.label)} +${text}</b></span>
+    <span class="t-go">랭킹 보기 ›</span>
+  </a>`;
 }
 
 // ── Commute: Frankfurt ↔ route endpoints ────────────────────────────────
@@ -405,10 +428,20 @@ export function renderAbout(data: Data): string {
        도착 지연 확률은 과거 기록에서 <b>출발이 그만큼 늦었던 열차가 실제로 얼마나 늦게 도착했는지</b>로 계산해요.
        출퇴근 표의 칸을 누르면 "출발이 늦으면?" 표에서 노선별로 볼 수 있어요. 실시간 데이터가 없거나 30분 넘게 지나면 표시하지 않아요.</p>
 
+    <h2>이렇게 쓰면 편해요</h2>
+    <p>앱 설치 없이 웹사이트로 바로 써요. 로그인도 필요 없어요.</p>
+    <ul class="legend">
+      <li><b>📲 홈 화면에 추가</b> — iPhone은 Safari 아래 공유 버튼 → "홈 화면에 추가", Android는 Chrome 메뉴 → "홈 화면에 추가". 앱처럼 바로 열리고, 인터넷이 끊겨도 마지막 예보를 볼 수 있어요.</li>
+      <li><b>🧵 Threads·인스타·카톡에서 열었다면</b> — 앱 안 브라우저에서는 홈 화면 추가가 안 돼요. 오른쪽 위 메뉴에서 "외부 브라우저로 열기"를 눌러 주세요.</li>
+      <li><b>📤 공유</b> — 운세 카드의 "내 운세 공유하기"로 친구에게 보내거나, 매일 아침 만들어지는 카드 이미지를 그대로 공유해도 돼요. 카드에 출처가 들어 있어요.</li>
+    </ul>
+    <p>개인정보는 모으지 않아요. 고른 노선만 이 기기(브라우저)에 저장해요.</p>
+
     <h2>데이터 출처</h2>
     <p>${esc(meta.attribution.text.split(",")[0])}, via <a href="${meta.attribution.source_url}" rel="noopener">piebro/deutsche-bahn-data</a>.
        라이선스: <a href="${meta.attribution.license_url}" rel="noopener">CC BY 4.0</a>.
-       원본 운행 기록을 이 서비스에서 확률로 집계·가공했어요.</p>
+       원본 운행 기록을 이 서비스에서 확률로 집계·가공했어요.
+       실시간 정보: Deutsche Bahn Timetables API (DB API Marketplace).</p>
     <p>이 사이트는 Deutsche Bahn과 관련 없는 비공식 서비스이며, Deutsche Bahn이 내용을 보증하지 않아요.</p>
     <h2>공유 카드</h2>
     <p>매일 아침 그날의 예보 카드(1080×1350)가 자동으로 만들어져요: <a href="cards/latest.png">오늘의 카드 PNG</a></p>
