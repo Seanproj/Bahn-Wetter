@@ -2,7 +2,7 @@
 
 import type { Data, Direction, Forecast } from "./data";
 import { esc } from "./views";
-import { pct } from "./weather";
+import { freqText, pct } from "./weather";
 
 type Profile = Data["corridor"]["characters"][string];
 
@@ -34,7 +34,7 @@ export function persona(line: string, data: Data): Persona {
   if (s.cancel === max("cancel") && s.cancel >= 0.05)
     return { emoji: "👻", name: "잠수왕", quote: `${Math.round(1 / s.cancel)}번 중 1번은 홀연히 사라져요`, color: "var(--dex-ghost)" };
   if (s.p6 === max("p6"))
-    return { emoji: "🦥", name: "지각대장", quote: `${Math.round(1 / s.p6)}번 중 1번은 6분 넘게 늦어요. 그래도 결국 와요`, color: "var(--dex-sloth)" };
+    return { emoji: "🦥", name: "지각대장", quote: `${freqText(s.p6)}는 6분 넘게 늦어요. 그래도 결국 와요`, color: "var(--dex-sloth)" };
   if (s.p6 === min("p6"))
     return { emoji: "🐕", name: "성실한 모범생", quote: `95%는 ${s.p95}분 안에 도착. 믿고 타는 열차`, color: "var(--dex-dog)" };
   if (s.early >= 0.04)
