@@ -160,10 +160,19 @@ export function spin(el: HTMLElement): void {
     const b = BUCKETS.find((x) => x.key === bucket)!;
     const inside = q.filter((x) => x >= b.lo && x < b.hi);
     const minutes = inside.length ? inside[Math.floor(Math.random() * inside.length)] : Math.max(0, b.lo);
-    num.textContent = minutes <= 0 ? "정시" : `+${minutes}분`;
+    num.textContent = minutes < 0 ? `${minutes}분` : minutes === 0 ? "딱 정시" : `+${minutes}분`;
+    if (minutes < 0) {
+      verdict.textContent = "🐇 일찍 도착!";
+      el.dataset.bucket = bucket;
+      return pop(el);
+    }
   }
   verdict.textContent = VERDICT[bucket];
   el.dataset.bucket = bucket;
+  pop(el);
+}
+
+function pop(el: HTMLElement): void {
   el.classList.remove("pop");
   void el.offsetWidth; // restart the pop animation
   el.classList.add("pop");

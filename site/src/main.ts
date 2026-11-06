@@ -13,6 +13,25 @@ const ROUTES: Route[] = ["home", "commute", "ranking", "about", "card"];
 const app = document.querySelector<HTMLElement>("#app")!;
 const footer = document.querySelector<HTMLElement>("#footer")!;
 const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
+const toast = document.querySelector<HTMLElement>("#toast")!;
+
+function showToast(text: string) {
+  toast.textContent = text;
+  toast.classList.add("on");
+  setTimeout(() => toast.classList.remove("on"), 2200);
+}
+
+/** Native share sheet on phones; elsewhere copy text + link to the clipboard. */
+async function share(text: string) {
+  const url = location.href.split("#")[0];
+  try {
+    if (navigator.share) return await navigator.share({ title: "Bahn-Wetter", text, url });
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    showToast("복사했어요! 붙여넣기로 공유하세요");
+  } catch (e) {
+    if ((e as Error).name !== "AbortError") showToast("공유하지 못했어요");
+  }
+}
 
 function store<T extends string>(key: string, fallback: T): T {
   try {
@@ -91,6 +110,8 @@ function openDetail(title: string, f: Forecast, trip?: { line: string; direction
 
 app.addEventListener("click", (e) => {
   const t = e.target as HTMLElement;
+  const shareBtn = t.closest<HTMLElement>("[data-share]");
+  if (shareBtn) return void share(shareBtn.dataset.share!);
   const chip = t.closest<HTMLElement>("[data-daytype]");
   if (chip) {
     const d = chip.dataset.daytype as DayType;

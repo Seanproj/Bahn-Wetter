@@ -62,6 +62,9 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 plus a small-sample
   penalty 0.67·sqrt(b(1−b)/n), and never picks 🌪️.
 - The ranking is observed data for the last 7 days *of the data*, not the calendar week — always show its dates.
+- Sharing: the home slip has a share button (Web Share API, clipboard fallback) and a link to `cards/latest.png`;
+  index.html carries Open Graph tags whose image is the daily `cards/latest.png`, so link previews show today's card.
+  The share card prints the site URL. The home teaser shows the ranking's biggest delay with its data dates.
 - `#/card?date=YYYY-MM-DD` renders the share card for any day; animated sky layers live in `#sky` and stop
   under prefers-reduced-motion.
 
