@@ -47,6 +47,28 @@ async function share(text: string) {
   sheet.showModal();
 }
 
+/**
+ * Today's card PNG in a sheet instead of a new tab (in-app browsers and home-screen apps often block or
+ * mishandle a raw image tab). The date query skips yesterday's cached image; if today's card is missing,
+ * the sheet links to the live #/card view instead.
+ */
+function openCard() {
+  const day = berlinNow().date;
+  sheet.innerHTML = `<form method="dialog">
+    <p class="sheet-title">🖼️ 오늘의 운세 카드</p>
+    <img class="card-img" src="cards/latest.png?d=${day}" alt="오늘의 운세 카드" width="1080" height="1350">
+    <p class="note card-tip">휴대폰에서는 이미지를 <b>길게 눌러</b> 저장하거나 공유할 수 있어요.</p>
+    <div class="share-row"><a class="share-btn" href="cards/latest.png?d=${day}" download="bahn-wetter-${day}.png">💾 이미지 저장</a>
+      <button class="close">닫기</button></div>
+  </form>`;
+  sheet.querySelector("img")!.addEventListener("error", (e) => {
+    (e.target as HTMLElement).outerHTML = `<p class="card-missing">오늘 카드 이미지가 아직 준비되지 않았어요.<br><a href="#/card">카드 화면으로 보기 ›</a></p>`;
+    sheet.querySelector(".card-tip")?.remove();
+    sheet.querySelector("a[download]")?.remove();
+  });
+  sheet.showModal();
+}
+
 function store<T extends string>(key: string, fallback: T): T {
   try {
     return (localStorage.getItem(key) as T) ?? fallback;
@@ -128,6 +150,7 @@ app.addEventListener("click", (e) => {
   const t = e.target as HTMLElement;
   const shareBtn = t.closest<HTMLElement>("[data-share]");
   if (shareBtn) return void share(shareBtn.dataset.share!);
+  if (t.closest("[data-card]")) return openCard();
   const chip = t.closest<HTMLElement>("[data-daytype]");
   if (chip) {
     const d = chip.dataset.daytype as DayType;
@@ -206,6 +229,7 @@ window.addEventListener("appinstalled", () => {
 registerServiceWorker();
 
 window.addEventListener("hashchange", () => {
+  if (sheet.open) sheet.close(); // e.g. the card sheet's "카드 화면으로 보기" link
   render();
   window.scrollTo(0, 0);
 });

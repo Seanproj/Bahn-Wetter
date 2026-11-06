@@ -62,12 +62,13 @@ Tone: fun and shareable, not a precision tool. UI language: Korean (de/en later)
 - The "가장 맑은 열차" pick ranks by P(bad trip) = p_cancel + (1 − p_cancel)·p_delay6 plus a small-sample
   penalty 0.67·sqrt(b(1−b)/n), and never picks 🌪️.
 - The ranking is observed data for the last 7 days *of the data*, not the calendar week — always show its dates.
-- Sharing: the home slip has a share button (Web Share API, clipboard fallback) and a link to `cards/latest.png`;
+- Sharing: the home slip has a share button (Web Share API, clipboard fallback) and a "오늘의 카드" button that shows
+  `cards/latest.png?d=<date>` in the sheet (never a raw image tab; a missing card falls back to `#/card`);
   index.html carries Open Graph tags whose image is the daily `cards/latest.png`, so link previews show today's card.
   The share card prints the site URL. The home teaser shows the ranking's biggest delay with its data dates.
 - Outside an app (site/src/install.ts): web app manifest + icons (site/public/icons) for "add to home screen";
-  `public/sw.js` serves pages and data/*.json network-first (cached copy offline), hashed assets cache-first,
-  and never touches other origins (live.json). In-app browsers (Threads = "Barcelona" UA, Instagram, KakaoTalk, …)
+  `public/sw.js` intercepts only the app page (…/, index.html) and data/*.json (network-first by URL, cached copy
+  offline) and hashed assets/icons (cache-first); cards, manifest and other origins (live.json) go straight to the network. In-app browsers (Threads = "Barcelona" UA, Instagram, KakaoTalk, …)
   get a banner to open the real browser; iOS Safari / Chrome get a dismissible home-screen hint on the home tab.
   Sharing falls back from the share sheet to clipboard to a manual-copy sheet. No tracking; only preferences in localStorage.
 - `#/card?date=YYYY-MM-DD` renders the share card for any day; animated sky layers live in `#sky` and stop

@@ -139,7 +139,7 @@ export function renderHome(data: Data, ctx: Ctx): string {
         </div>
         <div class="share-row">
           <button type="button" class="share-btn" data-share="${esc(shareText(data, ctx, best, w))}">📤 내 운세 공유하기</button>
-          <a class="share-btn ghost" href="cards/latest.png" target="_blank" rel="noopener">🖼️ 오늘의 카드</a>
+          <button type="button" class="share-btn ghost" data-card>🖼️ 오늘의 카드</button>
         </div>
         ${others.length ? `<p class="others-title">같은 ${best.hour}시대 다른 열차</p>
         <ol class="others">${others
@@ -444,7 +444,7 @@ export function renderAbout(data: Data): string {
        실시간 정보: Deutsche Bahn Timetables API (DB API Marketplace).</p>
     <p>이 사이트는 Deutsche Bahn과 관련 없는 비공식 서비스이며, Deutsche Bahn이 내용을 보증하지 않아요.</p>
     <h2>공유 카드</h2>
-    <p>매일 아침 그날의 예보 카드(1080×1350)가 자동으로 만들어져요: <a href="cards/latest.png">오늘의 카드 PNG</a></p>
+    <p>매일 아침 그날의 예보 카드(1080×1350)가 자동으로 만들어져요: <button type="button" class="link-btn" data-card>오늘의 카드 보기</button></p>
     <p class="note">데이터 기준일 ${meta.data_until} · 생성 ${meta.generated_at.slice(0, 10)} · 예보 표는 매달 3일에 갱신돼요</p>
   </section>`;
 }
