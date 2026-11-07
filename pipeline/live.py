@@ -221,7 +221,7 @@ class ApiSource:
                     raise SystemExit(f"API rejected the credentials (HTTP {e.code})") from e
                 if attempt == 2:
                     raise
-            except urllib.error.URLError:
+            except (urllib.error.URLError, OSError):  # incl. connection resets / timeouts mid-response
                 if attempt == 2:
                     raise
             time.sleep(2 * (attempt + 1))
@@ -286,7 +286,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         source, mode = ApiSource(client_id, api_key), "api"
 
-    data = snapshot(source, now, mode)
+    try:
+        data = snapshot(source, now, mode)
+    except (urllib.error.URLError, OSError) as e:
+        # The API is flaky at times. Publish nothing: the site hides a snapshot once it is older than
+        # max_age_min, and the next scheduled run tries again. Exit 0 so a blip does not mail a failure.
+        print(f"::warning::live snapshot skipped, API unreachable after retries: {e!r}")
+        return 0
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     c = data["corridor"]
