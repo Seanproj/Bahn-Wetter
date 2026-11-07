@@ -99,3 +99,42 @@ def test_every_route_direction_is_reported(snap):
     cfg = yaml.safe_load((ROOT / "config" / "stations.yaml").read_text())
     keys = {k for r in cfg["routes"] for k in (f"ffm_{r['code']}", f"{r['code']}_ffm")}
     assert set(snap["corridor"]) == keys  # routes without fixtures are present, just empty
+
+
+def test_api_retries_connection_reset(monkeypatch):
+    """A reset mid-response (OSError, not URLError) is retried like any network error."""
+    calls = []
+
+    class Res:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"<timetable/>"
+
+    def urlopen(req, timeout):
+        calls.append(req.full_url)
+        if len(calls) == 1:
+            raise ConnectionResetError(104, "Connection reset by peer")
+        return Res()
+
+    monkeypatch.setattr(live.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    assert live.ApiSource("id", "key").get("fchg/08000105") == "<timetable/>"
+    assert len(calls) == 2
+
+
+def test_unreachable_api_skips_without_failing(monkeypatch, tmp_path):
+    """After the retries, the run publishes nothing and exits 0 (the site hides stale snapshots)."""
+    def boom(*a, **k):
+        raise ConnectionResetError(104, "Connection reset by peer")
+
+    monkeypatch.setattr(live, "snapshot", boom)
+    monkeypatch.setenv("DB_CLIENT_ID", "id")
+    monkeypatch.setenv("DB_API_KEY", "key")
+    out = tmp_path / "live.json"
+    assert live.main(["--out", str(out)]) == 0
+    assert not out.exists()

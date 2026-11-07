@@ -50,7 +50,7 @@ jobs:
         run: uv run --no-project --with pyyaml python pipeline/live.py --out out/live.json
 
       - name: Publish to live-data branch
-        if: steps.creds.outputs.ok == 'true'
+        if: steps.creds.outputs.ok == 'true' && hashFiles('out/live.json') != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
